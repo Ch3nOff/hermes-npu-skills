@@ -1,0 +1,36 @@
+{
+  "validation": {
+    "A": {
+      "mapping": "A (notebook lama)",
+      "acc": 0.7300743889479278,
+      "macro_f1": 0.4190553228582615,
+      "mae_injection": 0.06316981204789945,
+      "mae_shell": 0.08768720843595364
+    },
+    "B": {
+      "mapping": "B (incoming zip)",
+      "acc": 0.9585547290116897,
+      "macro_f1": 0.572720135444565,
+      "mae_injection": 0.06316981204789945,
+      "mae_shell": 0.047853965807414335
+    },
+    "winner": "B"
+  },
+  "test": {
+    "A": {
+      "mapping": "A (notebook lama)",
+      "acc": 0.7409766454352441,
+      "macro_f1": 0.42636569779426925,
+      "mae_injection": 0.06430004214986558,
+      "mae_shell": 0.0962792831272145
+    },
+    "B": {
+      "mapping": "B (incoming zip)",
+      "acc": 0.9660297239915074,
+      "macro_f1": 0.8175925048187822,
+      "mae_injection": 0.06430004214986558,
+      "mae_shell": 0.046512978391938825
+    },
+    "winner": "B"
+  }
+}

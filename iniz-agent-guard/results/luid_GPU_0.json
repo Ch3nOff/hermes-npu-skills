@@ -1,0 +1,210 @@
+[
+  {
+    "device_under_test": "GPU.0",
+    "luid": "0x00000000_0x00010480",
+    "engtype": "compute",
+    "samples": 5,
+    "max_util": 100.07,
+    "mean_util": 79.998
+  },
+  {
+    "device_under_test": "GPU.0",
+    "luid": "0x00000000_0x00010480",
+    "engtype": "3d",
+    "samples": 5,
+    "max_util": 0.0,
+    "mean_util": 0.0
+  },
+  {
+    "device_under_test": "GPU.0",
+    "luid": "0x00000000_0x00010480",
+    "engtype": "",
+    "samples": 5,
+    "max_util": 0.0,
+    "mean_util": 0.0
+  },
+  {
+    "device_under_test": "GPU.0",
+    "luid": "0x00000000_0x00010480",
+    "engtype": "",
+    "samples": 5,
+    "max_util": 0.0,
+    "mean_util": 0.0
+  },
+  {
+    "device_under_test": "GPU.0",
+    "luid": "0x00000000_0x00010480",
+    "engtype": "",
+    "samples": 5,
+    "max_util": 0.0,
+    "mean_util": 0.0
+  },
+  {
+    "device_under_test": "GPU.0",
+    "luid": "0x00000000_0x00010480",
+    "engtype": "videodecode",
+    "samples": 5,
+    "max_util": 0.0,
+    "mean_util": 0.0
+  },
+  {
+    "device_under_test": "GPU.0",
+    "luid": "0x00000000_0x00010480",
+    "engtype": "copy",
+    "samples": 5,
+    "max_util": 0.0,
+    "mean_util": 0.0
+  },
+  {
+    "device_under_test": "GPU.0",
+    "luid": "0x00000000_0x00010480",
+    "engtype": "videoprocessing",
+    "samples": 5,
+    "max_util": 0.0,
+    "mean_util": 0.0
+  },
+  {
+    "device_under_test": "GPU.0",
+    "luid": "0x00000000_0x00010480",
+    "engtype": "videodecode",
+    "samples": 5,
+    "max_util": 0.0,
+    "mean_util": 0.0
+  },
+  {
+    "device_under_test": "GPU.0",
+    "luid": "0x00000000_0x00010480",
+    "engtype": "gsc",
+    "samples": 5,
+    "max_util": 0.0,
+    "mean_util": 0.0
+  },
+  {
+    "device_under_test": "GPU.0",
+    "luid": "0x00000000_0x00010480",
+    "engtype": "",
+    "samples": 5,
+    "max_util": 0.0,
+    "mean_util": 0.0
+  },
+  {
+    "device_under_test": "GPU.0",
+    "luid": "0x00000000_0x00010480",
+    "engtype": "",
+    "samples": 5,
+    "max_util": 0.0,
+    "mean_util": 0.0
+  },
+  {
+    "device_under_test": "GPU.0",
+    "luid": "0x00000000_0x00010480",
+    "engtype": "",
+    "samples": 5,
+    "max_util": 0.0,
+    "mean_util": 0.0
+  },
+  {
+    "device_under_test": "GPU.0",
+    "luid": "0x00000000_0x0001099d",
+    "engtype": "3d",
+    "samples": 5,
+    "max_util": 0.0,
+    "mean_util": 0.0
+  },
+  {
+    "device_under_test": "GPU.0",
+    "luid": "0x00000000_0x0001099d",
+    "engtype": "copy",
+    "samples": 5,
+    "max_util": 0.0,
+    "mean_util": 0.0
+  },
+  {
+    "device_under_test": "GPU.0",
+    "luid": "0x00000000_0x0001099d",
+    "engtype": "copy",
+    "samples": 5,
+    "max_util": 0.0,
+    "mean_util": 0.0
+  },
+  {
+    "device_under_test": "GPU.0",
+    "luid": "0x00000000_0x0001099d",
+    "engtype": "copy",
+    "samples": 5,
+    "max_util": 0.0,
+    "mean_util": 0.0
+  },
+  {
+    "device_under_test": "GPU.0",
+    "luid": "0x00000000_0x0001099d",
+    "engtype": "videodecode",
+    "samples": 5,
+    "max_util": 0.0,
+    "mean_util": 0.0
+  },
+  {
+    "device_under_test": "GPU.0",
+    "luid": "0x00000000_0x0001099d",
+    "engtype": "copy",
+    "samples": 5,
+    "max_util": 0.0,
+    "mean_util": 0.0
+  },
+  {
+    "device_under_test": "GPU.0",
+    "luid": "0x00000000_0x0001099d",
+    "engtype": "copy",
+    "samples": 5,
+    "max_util": 0.0,
+    "mean_util": 0.0
+  },
+  {
+    "device_under_test": "GPU.0",
+    "luid": "0x00000000_0x0001099d",
+    "engtype": "security",
+    "samples": 5,
+    "max_util": 0.0,
+    "mean_util": 0.0
+  },
+  {
+    "device_under_test": "GPU.0",
+    "luid": "0x00000000_0x0001099d",
+    "engtype": "videoencode",
+    "samples": 5,
+    "max_util": 0.0,
+    "mean_util": 0.0
+  },
+  {
+    "device_under_test": "GPU.0",
+    "luid": "0x00000000_0x0001099d",
+    "engtype": "ofa_0",
+    "samples": 5,
+    "max_util": 0.0,
+    "mean_util": 0.0
+  },
+  {
+    "device_under_test": "GPU.0",
+    "luid": "0x00000000_0x0001099d",
+    "engtype": "jpeg_decode_0",
+    "samples": 5,
+    "max_util": 0.0,
+    "mean_util": 0.0
+  },
+  {
+    "device_under_test": "GPU.0",
+    "luid": "0x00000000_0x0001099d",
+    "engtype": "vr",
+    "samples": 5,
+    "max_util": 0.0,
+    "mean_util": 0.0
+  },
+  {
+    "device_under_test": "GPU.0",
+    "luid": "0x00000000_0x0001099d",
+    "engtype": "copy",
+    "samples": 5,
+    "max_util": 0.0,
+    "mean_util": 0.0
+  }
+]

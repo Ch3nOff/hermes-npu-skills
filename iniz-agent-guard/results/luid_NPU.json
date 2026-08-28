@@ -1,0 +1,10 @@
+[
+  {
+    "device_under_test": "NPU",
+    "luid": "0x00000000_0x00011cf3",
+    "engtype": "compute",
+    "samples": 6,
+    "max_util": 102.75,
+    "mean_util": 70.42666666666666
+  }
+]

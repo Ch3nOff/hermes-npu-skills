@@ -1,0 +1,37 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Model weights & IR — terlalu besar untuk Git (IR INT8 = 495 MB)
+*.bin
+*.safetensors
+*.onnx
+*.pt
+*.pth
+models/
+models128/
+*-ov/
+
+# Data & artefak kerja
+work/
+ckpt/
+data/
+*.parquet
+dryrun_out/
+incoming/
+
+# Venv & tooling
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# Secrets — JANGAN pernah commit
+.env
+*.token
+hf_token*
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store

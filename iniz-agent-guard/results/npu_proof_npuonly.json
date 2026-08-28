@@ -1,0 +1,9 @@
+{
+  "npu_only_mode": true,
+  "execution_device_report": [],
+  "counters_csv": "C:\\Users\\MATTHE~1\\AppData\\Local\\Temp\\npu_proof_counters_npuonly.csv",
+  "npu_inferences_under_load": 228,
+  "own_pid_gpu_instances": [
+    "pid_17932_luid_0x00000000_0x00011cf3_phys_0_eng_0_engtype_compute"
+  ]
+}

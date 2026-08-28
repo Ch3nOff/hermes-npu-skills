@@ -1,0 +1,30 @@
+[
+  {
+    "device": "NPU",
+    "compile_ok": true,
+    "compile_s": 14.12,
+    "p50_ms": 48.3,
+    "p90_ms": 48.6,
+    "min_ms": 47.8,
+    "max_ms": 52.5,
+    "max_abs_diff_injection": 0.04535931348800659,
+    "max_abs_diff_shell": 0.03607337176799774,
+    "action_agreement_vs_torch": 1.0,
+    "n": 40,
+    "model": "../models/iniz-guard-int8-ov/guard.xml"
+  },
+  {
+    "device": "CPU",
+    "compile_ok": true,
+    "compile_s": 1.23,
+    "p50_ms": 95.8,
+    "p90_ms": 99.3,
+    "min_ms": 92.3,
+    "max_ms": 107.3,
+    "max_abs_diff_injection": 0.061482012271881104,
+    "max_abs_diff_shell": 0.039820194244384766,
+    "action_agreement_vs_torch": 1.0,
+    "n": 40,
+    "model": "../models/iniz-guard-int8-ov/guard.xml"
+  }
+]

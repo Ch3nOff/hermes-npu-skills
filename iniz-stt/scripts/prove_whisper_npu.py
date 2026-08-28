@@ -29,7 +29,7 @@ import threading
 import time
 from pathlib import Path
 
-AUDIO = Path("audio")
+AUDIO = Path(os.environ.get("INIZ_PROOF_AUDIO", "audio"))
 NPU_LUID = "0x00000000_0x00011cf3"
 IGPU_LUID = "0x00000000_0x00010480"
 
@@ -58,14 +58,15 @@ $lines | Out-File -FilePath "{out_path}" -Encoding utf8
 
 def main():
     device = sys.argv[1] if len(sys.argv) > 1 else "NPU"
-    model = "../models/whisper-base-int8-ov"
+    model = os.environ.get("INIZ_PROOF_MODEL", "../models/whisper-base-int8-ov")
+    tag = os.environ.get("INIZ_PROOF_TAG", device.replace(".", "_"))
     pid = os.getpid()
-    print(f"pid={pid} device={device}", flush=True)
+    print(f"pid={pid} device={device} model={model} audio={AUDIO}", flush=True)
 
     import soundfile as sf
     import openvino_genai as ov_genai
 
-    manifest = json.loads((AUDIO / "manifest.json").read_text())
+    manifest = json.loads((AUDIO / "manifest.json").read_text(encoding="utf-8"))
     clip = min(manifest, key=lambda m: m["duration_s"])
     arr, _ = sf.read(AUDIO / clip["file"], dtype="float32")
     audio = arr.tolist()
@@ -74,7 +75,7 @@ def main():
     pipe = ov_genai.WhisperPipeline(model, device)
     pipe.generate(audio)  # warmup
 
-    csv = Path(tempfile.gettempdir()) / f"whisper_proof_{device.replace('.','_')}.csv"
+    csv = Path(tempfile.gettempdir()) / f"whisper_proof_{tag}.csv"
     dur = 16
     t = threading.Thread(target=sample, args=(dur, str(csv), pid), daemon=True)
     t.start()
@@ -110,12 +111,12 @@ def main():
     for k, v in sorted(util.items(), key=lambda kv: -max(kv[1])):
         luid = k.split("_luid_")[1].split("_phys")[0] if "_luid_" in k else "?"
         eng = k.split("engtype_")[1] if "engtype_" in k else "?"
-        tag = "NPU" if luid == NPU_LUID else ("iGPU" if luid == IGPU_LUID else luid)
+        dev_label = "NPU" if luid == NPU_LUID else ("iGPU" if luid == IGPU_LUID else luid)
         if luid == NPU_LUID:
             hit_npu = True
         if luid == IGPU_LUID:
             hit_igpu = True
-        print(f"  {tag:5s} engtype={eng:<10s} n={len(v):>3d} "
+        print(f"  {dev_label:5s} engtype={eng:<10s} n={len(v):>3d} "
               f"max={max(v):>7.2f}% mean={sum(v)/len(v):>7.2f}%")
 
     if cpus:
@@ -129,15 +130,15 @@ def main():
     else:
         print("  NO accelerator activity -> running on CPU despite device string")
 
-    out = {"device_requested": device, "pid": pid, "transcriptions": n,
+    out = {"device_requested": device, "model": model, "audio_dir": str(AUDIO),
+           "pid": pid, "transcriptions": n,
            "npu_active": hit_npu, "igpu_active": hit_igpu,
            "cpu_mean_pct": round(sum(cpus)/len(cpus), 1) if cpus else None,
            "cpu_max_pct": round(max(cpus), 1) if cpus else None,
            "instances": {k: {"max": max(v), "mean": sum(v)/len(v), "n": len(v)}
                          for k, v in util.items()}}
-    Path(f"whisper_proof_{device.replace('.','_')}.json").write_text(
-        json.dumps(out, indent=2))
-    print(f"wrote whisper_proof_{device.replace('.','_')}.json")
+    Path(f"whisper_proof_{tag}.json").write_text(json.dumps(out, indent=2))
+    print(f"wrote whisper_proof_{tag}.json")
     return 0
 
 

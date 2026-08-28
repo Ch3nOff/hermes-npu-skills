@@ -23,13 +23,26 @@ executes it, then serve it over HTTP with the same process shape as
 `iniz-agent-guard/guard_server.py`.
 
 **Environment:** `openvino-genai` ≥ 2026.3, `optimum[openvino]`, `librosa`,
-`soundfile`, `pyarrow`. The NPU must appear in `ov.Core().available_devices`.
+`soundfile`, `pyarrow`, `opencc-python-reimplemented` (Chinese only). The NPU must
+appear in `ov.Core().available_devices`.
+
+---
+
+## Pick the model by language, not by habit
+
+| Language | Model | Why |
+|---|---|---|
+| English | `whisper-base` | WER 0.0900, 169.9 ms — `small` buys nothing measurable |
+| **Chinese** | **`whisper-small`** | `base` gives CER 0.51 (unusable); `small` gives 0.20 |
+
+The English and Chinese sections below reach **opposite conclusions about the NPU**,
+and both are correct: at `base` the NPU ties the CPU, at `small` it wins by 1.33×.
 
 ---
 
 ## The headline result is a negative one — read this first
 
-On this machine, **the NPU is not faster than the CPU for `whisper-base`**:
+On this machine, **the NPU is not faster than the CPU for `whisper-base`** on English:
 
 | Device | compile | p50 latency | p90 | RTF (median) | WER | CPU load during run |
 |---|---|---|---|---|---|---|
@@ -64,6 +77,53 @@ so this was verified independently with per-pid GPU-Engine counters
 
 93 transcriptions in ~13 s on NPU, 87 on CPU. The NPU numbers are real, not a
 fallback that happens to match.
+
+---
+
+## Traditional Chinese: model size decides this, not the device
+
+Measured on 10 Common Voice 16.1 zh-TW clips (39.7 s), references verified
+Traditional (`simp=0 / trad=11`) before use. CER, not WER — Chinese has no
+whitespace word boundaries.
+
+| Model | Device | p50 | RTF | CER_raw | CER_trad | Exact clips |
+|---|---|---|---|---|---|---|
+| `whisper-base` | NPU | 101.8 ms | 0.026 | **0.5135** | 0.4865 | 3/10 |
+| `whisper-base` | CPU | 118.4 ms | 0.031 | 0.5135 | 0.4865 | 3/10 |
+| **`whisper-small`** | **NPU** | 297.1 ms | 0.074 | **0.2027** | **0.1622** | **4/10** |
+| `whisper-small` | CPU | 394.1 ms | 0.106 | 0.2027 | 0.1622 | 4/10 |
+
+**`whisper-base` is not usable for Chinese.** Half the characters are wrong, and two
+clips came back as romanized nonsense (`土地認養案例` → `thoody learn yang andi`).
+`whisper-small` cuts CER 2.5× for 2.9× the latency — that trade is worth it here, and
+unlike English there is a real quality reason to pay it.
+
+At `whisper-small` the NPU also becomes **genuinely faster**: 297.1 ms vs 394.1 ms
+(1.33×), where at `base` the two devices were within 1 %. The NPU's fixed overhead
+amortizes as the model grows, so the English section's "NPU ≈ CPU" verdict is a
+`base`-sized finding, not a general one.
+
+### Two CER numbers, because one would lie
+
+Whisper's zh training data is overwhelmingly Simplified, so it transcribes Traditional
+audio correctly but sometimes writes Simplified characters. `開源服務` → `开源服务`
+is a **perfect** transcription in the wrong orthography: `CER_raw` scores it 2/4,
+`CER_trad` (both sides forced Traditional via opencc `s2twp`) scores it 0/4.
+
+Emitted script was **MIXED** on both models (`simp=3 trad=9` at `small`) — Whisper
+does not honour a Traditional preference, and there is no `language` token for it.
+If you need guaranteed Traditional output, post-process with opencc; the model will
+not do it for you.
+
+### Device proof under Chinese load
+
+`whisper-small` + zh audio on NPU: NPU adapter `0x00000000_0x00011cf3` at
+**max 105.10 %, mean 96.95 %**, CPU `_Total` 4.7 % mean — 42 transcriptions in ~13 s.
+Evidence in `results/whisper_proof_NPU_small_zhtw.json`.
+
+Over HTTP with `language=<|zh|>`: p50 301.0 ms, CER_trad 0.1622, `VERDICT: PASS`.
+Note `whisper-small` compile takes **11.64 s** on the NPU versus 1.01 s for `base` —
+budget for that at server start.
 
 ---
 
@@ -137,6 +197,19 @@ Run everything from the runtime dir with its venv (`$V` below is
    terminal(command="$V -u scripts/stt_client.py")
    ```
 
+7. **For Chinese, repeat with the zh scripts and `whisper-small`.** Completion:
+   `fetch_audio_zhtw.py` prints `reference script: ... -> TRADITIONAL`, and the bench
+   reports both `CER_raw` and `CER_trad`.
+   ```
+   terminal(command="$V -u scripts/fetch_audio_zhtw.py")
+   terminal(command="$V -u scripts/bench_zhtw.py --model ../models/whisper-small-int8-ov")
+   terminal(command="$V -u scripts/stt_client_zhtw.py")
+   ```
+   `scripts/script_check.py` is the Simplified/Traditional detector — run it on any
+   new dataset **before** trusting its card. Pass an absolute forward-slash path to
+   `INIZ_STT_MODEL`; `$HOME/...` becomes `\c\Users\...` under MSYS and the server
+   cannot find the IR.
+
 ---
 
 ## Server
@@ -194,24 +267,45 @@ Measured over HTTP on the NPU: `compile 1.01 s`, `warmup 151.2 ms`,
    column is absent, not zero.
 
 6. **`task=translate` on English audio returns English.** Not a bug — verified
-   working, but it proves nothing about translation quality. No non-English audio was
-   tested, so translation is **unvalidated**.
+   working, but it proves nothing about translation quality. Cross-language
+   translation remains **unvalidated**.
+
+7. **Dataset cards lie about orthography — measure it.** `CJY/Chinese-Dialogue-180k`
+   looked like a Chinese test set but is **Simplified** (980 Simplified-only chars vs
+   4 Traditional in a 92-row sample) and has no ASR ground truth (it is
+   speech-to-speech dialogue, 126 GB). `scripts/script_check.py` settles this in
+   seconds; `JacobLinCool/common_voice_16_1_zh_TW_clean` measured `simp=0 / trad=99`.
+
+8. **`datasets` audio decode needs `torchcodec`, and parquet row groups save time.**
+   `pq.ParquetFile(...).read_row_group(0)` pulls 100 rows out of a 341 MB shard
+   without materializing the whole file.
+
+9. **MSYS mangles `$HOME` for native programs.** `INIZ_STT_MODEL="$HOME/..."` reached
+   the server as `\c\Users\Matthew Chen\...` and it raised
+   `FileNotFoundError: Whisper IR not found`. Use `C:/Users/...` forward-slash paths.
+
+10. **`whisper-small` compile is 11.64 s on NPU** (vs 1.01 s for `base`). It looks
+    like a hang if you expect base-like startup.
 
 ---
 
 ## What is still open
 
-- **No non-English audio tested.** Language detection and `task=translate` are
-  exercised but not validated for quality. The `taiwan-mandarin-stt` prior experience
-  referenced in the roadmap **does not exist on this machine** — no local project, no
-  Whisper in the HF cache. This was built from scratch.
-- **Only `whisper-base`.** `small` / `large-v3` are untested; the NPU-vs-CPU verdict
-  may flip at larger sizes where the NPU's fixed overhead amortizes.
-- **No long-form audio.** Longest clip is 29.4 s. Whisper's 30 s window means
-  chunking behaviour past that is unverified.
-- **`timestamps=1` returned 1 chunk** for a 4.8 s clip. Correct but trivially so; not
-  a real test of segmentation.
+- **Traditional-Chinese output is not guaranteed.** Whisper emits MIXED orthography;
+  opencc post-processing would be needed for consistent Traditional. Not implemented.
+- **Only 10 zh clips (39.7 s), all short** (2.8–5.3 s) and all read speech. Common
+  Voice is not conversational audio.
+- **`whisper-large-v3` untested.** `small` fixed most of the Chinese CER; `large-v3`
+  may fix the rest, but its NPU compile time and memory are unmeasured here.
+- **Translation still unvalidated.** `task=translate` was only run on English audio,
+  where it correctly returns English — that tests nothing.
+- **No long-form audio.** Longest clip anywhere is 29.4 s (English). Whisper's 30 s
+  window means chunking past that is unverified.
+- **`GPU.0` never benchmarked** in any language.
 - **No streaming / partial results.** Requests are whole-file only.
+- The `taiwan-mandarin-stt` prior experience cited in the repo roadmap **does not
+  exist on this machine** — no local project, no Whisper in the HF cache. Everything
+  here was built from scratch.
 
 ---
 
@@ -222,15 +316,23 @@ $V -u scripts/probe_whisper.py NPU          # stage timings, ~5 s
 $V -u scripts/bench_whisper.py --devices NPU,CPU
 $V -u scripts/prove_whisper_npu.py NPU      # expect npu_active: true
 $V -u scripts/stt_client.py                 # expect VERDICT: PASS
+
+# Traditional Chinese
+$V -u scripts/fetch_audio_zhtw.py           # expect -> TRADITIONAL
+$V -u scripts/bench_zhtw.py --model ../models/whisper-small-int8-ov
+$V -u scripts/stt_client_zhtw.py            # expect VERDICT: PASS
 ```
 
-Accept only if: `npu_active` is `true` for the NPU run and `false` for CPU, WER
-≤ 0.10 on the LibriSpeech clips, NPU/CPU transcript agreement is 8/8, and the client
-prints `VERDICT: PASS` with all five error cases returning 4xx.
+Accept only if: `npu_active` is `true` for the NPU run and `false` for CPU, English
+WER ≤ 0.10 with 8/8 transcript agreement, Chinese `CER_trad` ≤ 0.20 on
+`whisper-small`, and both clients print `VERDICT: PASS`.
 
 ## See Also
 
-- `results/whisper_bench.json` — per-device latency, RTF, WER, and all transcripts
-- `results/whisper_proof_NPU.json`, `results/whisper_proof_CPU.json` — LUID evidence
+- `results/whisper_bench.json` — English per-device latency, RTF, WER, transcripts
+- `results/whisper_bench_zhtw.json`, `results/whisper_bench_zhtw_small.json` —
+  Chinese CER_raw / CER_trad / emitted script per device
+- `results/whisper_proof_NPU.json`, `whisper_proof_CPU.json`,
+  `whisper_proof_NPU_small_zhtw.json` — LUID evidence
 - `iniz-agent-guard/SKILL.md` — the discriminative counterpart and the shared
   server/proof discipline

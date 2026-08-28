@@ -1,0 +1,72 @@
+[
+  {
+    "device": "NPU",
+    "compile_ok": true,
+    "compile_s": 1.18,
+    "language": "<|zh|>",
+    "clips": 10,
+    "latency_p50_ms": 101.8,
+    "latency_p90_ms": 132.4,
+    "rtf_median": 0.026,
+    "cer_raw": 0.5135,
+    "cer_raw_errors": 38,
+    "cer_raw_chars": 74,
+    "cer_trad": 0.4865,
+    "cer_trad_errors": 36,
+    "cer_trad_chars": 74,
+    "hyp_script": {
+      "simp": 4,
+      "trad": 7,
+      "chars": 92,
+      "verdict": "MIXED"
+    },
+    "audio_seconds_total": 39.68,
+    "transcripts": [
+      "飞载也可以说com",
+      "外交語全球性議題",
+      "我們的人口結構急速老化",
+      "新店端",
+      "責政卻的說明了星球的大小",
+      "开源服务",
+      "松风巧",
+      "thoody learn yang andi",
+      "雖然我沒有辦法",
+      "華棟山學院最受歡迎的唐潘克"
+    ]
+  },
+  {
+    "device": "CPU",
+    "compile_ok": true,
+    "compile_s": 0.64,
+    "language": "<|zh|>",
+    "clips": 10,
+    "latency_p50_ms": 118.4,
+    "latency_p90_ms": 139.2,
+    "rtf_median": 0.0309,
+    "cer_raw": 0.5135,
+    "cer_raw_errors": 38,
+    "cer_raw_chars": 74,
+    "cer_trad": 0.4865,
+    "cer_trad_errors": 36,
+    "cer_trad_chars": 74,
+    "hyp_script": {
+      "simp": 4,
+      "trad": 7,
+      "chars": 92,
+      "verdict": "MIXED"
+    },
+    "audio_seconds_total": 39.68,
+    "transcripts": [
+      "飞载也可以说com",
+      "外交語全球性議題",
+      "我們的人口結構急速老化",
+      "新店端",
+      "責政卻的說明了星球的大小",
+      "开源服务",
+      "松风巧",
+      "thoody learn yang anli",
+      "雖然我沒有辦法",
+      "華棟山學院最受歡迎的唐潘克"
+    ]
+  }
+]

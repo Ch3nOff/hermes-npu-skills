@@ -1,0 +1,72 @@
+[
+  {
+    "device": "NPU",
+    "compile_ok": true,
+    "compile_s": 35.41,
+    "language": "<|zh|>",
+    "clips": 10,
+    "latency_p50_ms": 297.1,
+    "latency_p90_ms": 336.9,
+    "rtf_median": 0.0738,
+    "cer_raw": 0.2027,
+    "cer_raw_errors": 15,
+    "cer_raw_chars": 74,
+    "cer_trad": 0.1622,
+    "cer_trad_errors": 12,
+    "cer_trad_chars": 74,
+    "hyp_script": {
+      "simp": 3,
+      "trad": 9,
+      "chars": 76,
+      "verdict": "MIXED"
+    },
+    "audio_seconds_total": 39.68,
+    "transcripts": [
+      "再加上也可以刷卡。",
+      "外交與全球性議題",
+      "我們的人口結構極速老化",
+      "新店端",
+      "則正確地說明了星球的大小",
+      "开源服务",
+      "松风桥",
+      "土地論揚恩禮",
+      "雖然我沒有辦法",
+      "華頓山學院最受歡迎的談判客"
+    ]
+  },
+  {
+    "device": "CPU",
+    "compile_ok": true,
+    "compile_s": 1.06,
+    "language": "<|zh|>",
+    "clips": 10,
+    "latency_p50_ms": 394.1,
+    "latency_p90_ms": 417.6,
+    "rtf_median": 0.1061,
+    "cer_raw": 0.2027,
+    "cer_raw_errors": 15,
+    "cer_raw_chars": 74,
+    "cer_trad": 0.1622,
+    "cer_trad_errors": 12,
+    "cer_trad_chars": 74,
+    "hyp_script": {
+      "simp": 3,
+      "trad": 9,
+      "chars": 76,
+      "verdict": "MIXED"
+    },
+    "audio_seconds_total": 39.68,
+    "transcripts": [
+      "再加上也可以刷卡。",
+      "外交與全球性議題",
+      "我們的人口結構極速老化",
+      "新店端",
+      "則正確地說明了星球的大小",
+      "开源服务",
+      "松风桥",
+      "土地論揚恩禮",
+      "雖然我沒有辦法",
+      "華頓山學院最受歡迎的談判客"
+    ]
+  }
+]

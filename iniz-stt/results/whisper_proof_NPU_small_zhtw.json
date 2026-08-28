@@ -1,0 +1,18 @@
+{
+  "device_requested": "NPU",
+  "model": "../models/whisper-small-int8-ov",
+  "audio_dir": "audio_zhtw",
+  "pid": 21820,
+  "transcriptions": 42,
+  "npu_active": true,
+  "igpu_active": false,
+  "cpu_mean_pct": 4.7,
+  "cpu_max_pct": 8.7,
+  "instances": {
+    "pid_21820_luid_0x00000000_0x00011cf3_phys_0_eng_0_engtype_compute": {
+      "max": 105.1,
+      "mean": 96.955,
+      "n": 4
+    }
+  }
+}

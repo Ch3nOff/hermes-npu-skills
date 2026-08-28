@@ -1,9 +1,10 @@
 """
-verify_hf_download.py — VERIFIKASI: download IR dari HF Hub (bukan dari disk lokal),
-compile di NPU, dan pastikan hasilnya identik dengan model lokal.
+verify_hf_download.py — VERIFICATION: download the IR from the HF Hub (not from
+local disk), compile it on the NPU, and confirm the results are identical to the
+local model.
 
-Ini membuktikan artefak yang di-upload benar-benar utuh dan bisa dipakai orang lain,
-bukan sekadar "upload sukses" menurut laporan API.
+This proves the uploaded artifact is genuinely intact and usable by other
+people, not merely an "upload succeeded" report from the API.
 """
 
 import shutil
@@ -51,7 +52,7 @@ def main():
                              local_dir=str(tmp))
     ovdir = Path(local) / "openvino"
     files = sorted(p.name for p in ovdir.iterdir())
-    print("berkas terdownload:", files)
+    print("downloaded files:", files)
     size = (ovdir / "guard.bin").stat().st_size / 1e6
     meta = json.loads((ovdir / "guard_meta.json").read_text())
     print(f"guard.bin {size:.1f} MB  seq_len={meta['seq_len']} pooling={meta['pooling']}")
@@ -65,29 +66,31 @@ def main():
         tok.pad_token = tok.eos_token
     hf_out = scan_all(hf_compiled, tok, meta["seq_len"])
 
-    print("\nhasil dari model HASIL DOWNLOAD HF:")
+    print("\nresults from the model DOWNLOADED FROM HF:")
     for (text, expect), (inj, sh, a) in zip(CASES, hf_out):
         mark = "OK " if (expect is None or ACTIONS[a] == expect) else "MISS"
         print(f"  [{mark}] inj={inj:+.3f} shell={sh:+.3f} act={ACTIONS[a]:<18s} {text[:48]!r}")
 
-    # bandingkan dengan model lokal
+    # compare against the local model
     localxml = Path.home() / "npu-provider" / "models" / "iniz-guard-int8-ov" / "guard.xml"
     if localxml.exists():
-        print(f"\ncompile LOKAL -> NPU untuk pembanding ...", flush=True)
+        print(f"\ncompiling LOCAL -> NPU for comparison ...", flush=True)
         loc_compiled = core.compile_model(core.read_model(str(localxml)), "NPU")
         loc_out = scan_all(loc_compiled, tok, meta["seq_len"])
         maxd = max(max(abs(h[0] - l[0]), abs(h[1] - l[1]))
                    for h, l in zip(hf_out, loc_out))
         same_action = all(h[2] == l[2] for h, l in zip(hf_out, loc_out))
-        print(f"max |delta| HF vs lokal : {maxd:.10f}")
-        print(f"action identik          : {same_action}")
+        print(f"max |delta| HF vs local : {maxd:.10f}")
+        print(f"actions identical       : {same_action}")
         verdict = maxd < 1e-6 and same_action
     else:
-        print("\nmodel lokal tidak ada, lewati pembandingan")
+        print("\nno local model present, skipping the comparison")
         verdict = True
 
     shutil.rmtree(tmp, ignore_errors=True)
-    print(f"\nVERDICT: {'artefak HF UTUH dan identik dengan lokal' if verdict else 'ADA SELISIH — periksa'}")
+    msg = ("HF artifact is INTACT and identical to local" if verdict
+           else "MISMATCH FOUND — investigate")
+    print(f"\nVERDICT: {msg}")
     return 0 if verdict else 1
 
 

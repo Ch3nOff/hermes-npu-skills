@@ -1,10 +1,10 @@
 """
-verify_arch_match.py — apakah finetune_local.py dari paket incoming benar-benar
-skrip yang menghasilkan checkpoint-2634?
+verify_arch_match.py — is finetune_local.py from the incoming package really the
+script that produced checkpoint-2634?
 
-Uji: bangun GuardHeadModel persis seperti finetune_local.py, lalu bandingkan
-SET KUNCI state_dict-nya dengan model.safetensors hasil training.
-Kalau identik 100%, skrip itu memang arsitektur yang benar.
+Test: build GuardHeadModel exactly as finetune_local.py does, then compare its
+state_dict KEY SET against the trained model.safetensors.
+If they are 100% identical, that script is indeed the correct architecture.
 """
 
 import os
@@ -28,7 +28,7 @@ spec.loader.exec_module(mod)
 from transformers import AutoModel
 from peft import LoraConfig, get_peft_model
 
-print("membangun GuardHeadModel persis seperti finetune_local.py ...", flush=True)
+print("building GuardHeadModel exactly as finetune_local.py does ...", flush=True)
 backbone = AutoModel.from_pretrained(mod.BASE_MODEL, dtype=torch.float32)
 backbone.config.use_cache = False
 lora_cfg = LoraConfig(r=8, lora_alpha=32, lora_dropout=0.05,
@@ -47,26 +47,26 @@ ckpt = {k for k in hdr if k != "__metadata__"}
 only_built = sorted(built - ckpt)
 only_ckpt = sorted(ckpt - built)
 
-print(f"\nkunci di model yang dibangun : {len(built)}")
-print(f"kunci di checkpoint          : {len(ckpt)}")
-print(f"irisan                       : {len(built & ckpt)}")
-print(f"hanya di model dibangun      : {len(only_built)}")
+print(f"\nkeys in built model          : {len(built)}")
+print(f"keys in checkpoint           : {len(ckpt)}")
+print(f"intersection                 : {len(built & ckpt)}")
+print(f"only in built model          : {len(only_built)}")
 for k in only_built[:12]:
     print("   -", k)
-print(f"hanya di checkpoint          : {len(only_ckpt)}")
+print(f"only in checkpoint           : {len(only_ckpt)}")
 for k in only_ckpt[:12]:
     print("   +", k)
 
 if not only_built and not only_ckpt:
-    print("\nVERDICT: IDENTIK 100%. finetune_local.py incoming adalah arsitektur")
-    print("         yang benar-benar menghasilkan checkpoint-2634.")
+    print("\nVERDICT: 100% IDENTICAL. The incoming finetune_local.py is the")
+    print("         architecture that actually produced checkpoint-2634.")
 else:
-    print("\nVERDICT: TIDAK identik — lihat selisih di atas.")
+    print("\nVERDICT: NOT identical — see the differences above.")
 
-# bandingkan juga hyperparameter training
+# also compare the training hyperparameters
 ta = torch.load("ckpt/training_args.bin", weights_only=False)
 d = ta.to_dict() if hasattr(ta, "to_dict") else vars(ta)
-print("\nhyperparameter: checkpoint vs finetune_local.py")
+print("\nhyperparameters: checkpoint vs finetune_local.py")
 expected = {
     "per_device_train_batch_size": 1, "gradient_accumulation_steps": 16,
     "num_train_epochs": 3, "learning_rate": 2e-4, "weight_decay": 0.01,
@@ -79,5 +79,5 @@ for k, want in expected.items():
     got_s = str(got).split(".")[-1] if k == "lr_scheduler_type" else got
     ok = str(got_s) == str(want)
     match += ok
-    print(f"  {'OK ' if ok else 'BEDA'} {k:32s} ckpt={got_s}  script={want}")
-print(f"\n{match}/{len(expected)} hyperparameter cocok")
+    print(f"  {'OK ' if ok else 'DIFF'} {k:32s} ckpt={got_s}  script={want}")
+print(f"\n{match}/{len(expected)} hyperparameters match")

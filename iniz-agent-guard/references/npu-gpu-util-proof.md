@@ -1,74 +1,74 @@
-# Bukti Utilisasi NPU — Iniz Agent Guard
+# NPU Utilization Evidence — Iniz Agent Guard
 
-Status: mengisi TODO yang sebelumnya ditandai di paket skill ini.
-Bukti ini dikumpulkan selama sesi debugging `hermes-npu-provider`
-(pendahulu proyek ini, model Qwen2.5-0.5B-Instruct generatif — bukan
-versi 3-head fine-tuned), tapi metodologi verifikasinya berlaku sama
-untuk memastikan `guard_server.py` benar-benar jalan di NPU, bukan
-diam-diam fallback ke CPU/GPU.
+Status: fills in the TODO previously flagged in this skill package.
+This evidence was gathered during the `hermes-npu-provider` debugging
+session (the predecessor of this project, a generative
+Qwen2.5-0.5B-Instruct model — not the fine-tuned 3-head version), but
+the verification methodology applies equally to confirming that
+`guard_server.py` really runs on the NPU rather than silently falling
+back to CPU/GPU.
 
-## Ringkasan bukti
+## Evidence summary
 
-Tiga sumber independen dikumpulkan dan saling konsisten:
+Three independent sources were collected and they agree with each other:
 
-1. **Visual Task Manager** — tiga screenshot menunjukkan grafik NPU
-   melonjak ke pola plateau (naik tajam saat inferensi dimulai, datar
-   di puncak selama proses, turun tajam saat selesai) persis pada
-   window waktu benchmark dijalankan, sementara GPU 0 (Intel iGPU) dan
-   GPU 1 (NVIDIA RTX discrete) tetap landai di bawahnya pada window
-   yang sama.
+1. **Visual Task Manager** — three screenshots show the NPU graph
+   jumping to a plateau pattern (a sharp rise when inference starts,
+   flat at the top for the duration, a sharp drop when it finishes)
+   exactly within the time window in which the benchmark ran, while
+   GPU 0 (Intel iGPU) and GPU 1 (NVIDIA RTX discrete) stayed flat and
+   low over the same window.
 
-2. **CSV performance sampler** (`perf_sampler_gpu_detail.ps1` di
-   folder `references/` ini) — mencatat `gpu_util_sum_pct` dan
-   `cpu_util_pct` per timestamp. CPU tercatat maksimum ~4.7% selama
-   window inferensi, jauh di bawah yang diharapkan kalau beban kerja
-   itu benar-benar jalan di CPU.
+2. **CSV performance sampler** (`perf_sampler_gpu_detail.ps1` in this
+   `references/` folder) — records `gpu_util_sum_pct` and
+   `cpu_util_pct` per timestamp. The CPU peaked at roughly 4.7% during
+   the inference window, far below what you would expect if the
+   workload were really running on the CPU.
 
-3. **Atribusi per-proses GPU** — breakdown per-PID menunjukkan aktivitas
-   GPU pada window yang sama berasal dari proses UI (Hermes UI sendiri,
-   compositor DWM Windows) — BUKAN dari proses Python/server yang
-   menjalankan inferensi model.
+3. **Per-process GPU attribution** — the per-PID breakdown shows that
+   the GPU activity in that same window came from UI processes (Hermes
+   UI itself, the Windows DWM compositor) — NOT from the Python/server
+   process running model inference.
 
-## ⚠️ Catatan jujur soal batas bukti ini
+## ⚠️ An honest note on the scope of this evidence
 
-- **Bukti ini dikumpulkan untuk model generatif 0.5B biasa**
-  (`hermes-npu-provider`, sebelum fine-tuning 3-head), bukan untuk
-  `guard_server.py` versi terkini secara langsung. Metodologinya
-  identik dan device (`NPU`) di `guard_server.py` tidak berubah, tapi
-  jika ingin bukti yang 100% spesifik untuk model 3-head hasil
-  fine-tuning, ulangi capture Task Manager + CSV sampler ini SETELAH
-  model hasil fine-tuning benar-benar di-export ke OpenVINO INT8 dan
-  diserve lewat `guard_server.py`.
-- **`gpu_util_sum_pct` di CSV mentah pernah menunjukkan angka 17-41%**
-  pada window yang sama dengan inferensi NPU — ini AWALNYA terlihat
-  mencurigakan, tapi breakdown per-proses (poin 3 di atas) menjelaskan
-  ini berasal dari Hermes UI yang me-render hasil streaming secara
-  real-time, bukan dari proses inferensi itu sendiri. Dicatat di sini
-  supaya tidak disalahartikan sebagai bukti yang bertentangan kalau
-  seseorang membaca ulang CSV mentah tanpa konteks ini.
-- **Latensi yang terukur** (~2.7–6.6 detik tergantung kuantisasi
-  INT4/INT8) jauh di atas target awal blueprint (<15ms) — ini fakta
-  yang perlu diketahui siapa pun yang membaca proof-of-utilization ini
-  supaya tidak salah simpul "NPU dipakai" dengan "NPU cepat". NPU
-  dipakai secara terkonfirmasi; performa absolutnya adalah pertanyaan
-  terpisah, dan generasi hardware NPU saat ini (Meteor Lake/Arrow
-  Lake) masih punya variansi tinggi untuk beban kerja LLM kecil
-  sekalipun.
+- **This evidence was gathered for a plain 0.5B generative model**
+  (`hermes-npu-provider`, before the 3-head fine-tuning), not for the
+  current `guard_server.py` directly. The methodology is identical and
+  the device (`NPU`) in `guard_server.py` has not changed, but if you
+  want evidence that is 100% specific to the fine-tuned 3-head model,
+  repeat this Task Manager capture + CSV sampler AFTER the fine-tuned
+  model has actually been exported to OpenVINO INT8 and served through
+  `guard_server.py`.
+- **`gpu_util_sum_pct` in the raw CSV did at one point show 17-41%**
+  in the same window as NPU inference — this looked suspicious AT
+  FIRST, but the per-process breakdown (point 3 above) explains that it
+  came from the Hermes UI rendering streaming output in real time, not
+  from the inference process itself. Noted here so that it is not
+  misread as contradictory evidence by someone re-reading the raw CSV
+  without this context.
+- **The measured latency** (~2.7–6.6 seconds depending on INT4/INT8
+  quantization) is far above the blueprint's original target (<15ms) —
+  a fact anyone reading this proof-of-utilization needs to know so they
+  do not conflate "the NPU is being used" with "the NPU is fast". NPU
+  usage is confirmed; its absolute performance is a separate question,
+  and the current generation of NPU hardware (Meteor Lake/Arrow Lake)
+  still has high variance even for small LLM workloads.
 
-## Cara mereplikasi verifikasi ini sendiri
+## How to replicate this verification yourself
 
-1. Jalankan `scripts/guard_server.py`.
-2. Buka Task Manager > Performance > NPU **sebelum** menembak request
-   apa pun ke server.
-3. Kirim beberapa request test (lihat contoh curl di `SKILL.md`
-   bagian Quick Reference).
-4. Amati: grafik NPU harus naik pada window waktu yang sama dengan
-   request diproses; grafik GPU discrete (kalau ada) harus tetap
-   landai pada window yang sama.
-5. Jalankan `references/perf_sampler_gpu_detail.ps1` secara paralel
-   untuk mendapat catatan CSV yang bisa diperiksa ulang, bukan cuma
-   observasi visual sesaat.
+1. Run `scripts/guard_server.py`.
+2. Open Task Manager > Performance > NPU **before** firing any request
+   at the server.
+3. Send a few test requests (see the curl examples in the Quick
+   Reference section of `SKILL.md`).
+4. Observe: the NPU graph must rise in the same time window in which
+   the requests are processed; the discrete GPU graph (if any) must
+   stay flat over that same window.
+5. Run `references/perf_sampler_gpu_detail.ps1` in parallel to obtain a
+   CSV record that can be re-examined, rather than just a fleeting
+   visual observation.
 
-Bukti yang genuinely meyakinkan butuh ketiga hal di atas ditemukan
-bersamaan pada satu window waktu yang sama — bukan cuma satu sumber
-saja.
+Genuinely convincing evidence requires all three of the above to line
+up within one and the same time window — not just a single source on
+its own.

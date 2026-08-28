@@ -1,26 +1,26 @@
 """
 guard_server.py — Iniz Agent Guard (NPU security engine, fine-tuned classifier)
 
-PERUBAHAN BESAR vs versi sebelumnya:
-  Versi lama memakai openvino_genai.LLMPipeline dan meminta model 0.5B generatif
-  mengarang JSON skor — pendekatan itu ditinggalkan. Checkpoint hasil fine-tuning
-  (lora_adapter, checkpoint-2634) TIDAK punya lm_head: ia adalah Qwen2Model +
-  3 head diskriminatif. Jadi server ini memanggil ov.CompiledModel langsung dan
-  membaca tensor skor — tidak ada generasi teks, tidak ada parsing JSON,
-  tidak ada max_new_tokens.
+MAJOR CHANGE vs the previous version:
+  The old version used openvino_genai.LLMPipeline and asked a 0.5B generative
+  model to invent JSON scores — that approach has been abandoned. The
+  fine-tuned checkpoint (lora_adapter, checkpoint-2634) has NO lm_head: it is
+  a Qwen2Model plus 3 discriminative heads. So this server calls
+  ov.CompiledModel directly and reads the score tensors — no text generation,
+  no JSON parsing, no max_new_tokens.
 
-Arsitektur model yang dilayani:
-  Qwen2Model (24 layer, hidden 896, LoRA r=8 q/k/v/o sudah di-merge)
-    -> pooling last-non-pad
-    -> inj_head   (Linear 896->1)  regresi skor injection
-    -> shell_head (Linear 896->1)  regresi skor shell-risk
-    -> action_head(Linear 896->4)  klasifikasi aksi
+Architecture of the served model:
+  Qwen2Model (24 layers, hidden 896, LoRA r=8 q/k/v/o already merged)
+    -> last-non-pad pooling
+    -> inj_head   (Linear 896->1)  injection score regression
+    -> shell_head (Linear 896->1)  shell-risk score regression
+    -> action_head(Linear 896->4)  action classification
 
 API:
   POST /scan   {"text": "...", "context": "..."}
     -> {"injection_score", "shell_risk_score", "action", "confidence",
         "action_probs", "_npu_ms", "_device", "_model"}
-  GET  /health -> status, device, latensi warmup
+  GET  /health -> status, device, warmup latency
 """
 
 import json
@@ -42,12 +42,13 @@ MODEL_DIR = Path(os.environ.get(
 DEVICE = os.environ.get("INIZ_GUARD_DEVICE", "NPU")
 PORT = int(os.environ.get("INIZ_GUARD_PORT", "8009"))
 
-# Threshold gate injection. Nilai default diambil dari sweep empiris di
-# work/eval_ov_final.json (bukan angka karangan) — lihat SKILL.md.
+# Injection gate threshold. The default value comes from an empirical sweep in
+# work/eval_ov_final.json (not a made-up number) — see SKILL.md.
 THRESHOLD = float(os.environ.get("INIZ_GUARD_THRESHOLD", "0.30"))
 
-# Keyword backstop tetap dipertahankan: shell_head lemah karena dataset training
-# hanya punya 12/14036 sampel code_execution. Keyword hit MENAIKKAN shell score.
+# The keyword backstop is deliberately kept: shell_head is weak because the
+# training dataset only had 12/14036 code_execution samples. A keyword hit
+# RAISES the shell score.
 _SHELL_KW = ["rm -rf", "curl ", "wget ", "nc -e", "netcat", "base64 -d", "eval(",
              "chmod 777", "chown root", "/etc/passwd", "/etc/shadow", "exfil",
              "reverse shell", "bind shell", "> /dev/tcp", "os.system", "subprocess",
@@ -55,7 +56,7 @@ _SHELL_KW = ["rm -rf", "curl ", "wget ", "nc -e", "netcat", "base64 -d", "eval("
 
 
 class Engine:
-    """Load IR sekali, infer berulang. Thread-safe via lock (NPU single request)."""
+    """Load the IR once, infer repeatedly. Thread-safe via a lock (NPU handles a single request)."""
 
     def __init__(self, model_dir: Path, device: str):
         import openvino as ov
@@ -69,7 +70,7 @@ class Engine:
 
         xml = model_dir / "guard.xml"
         if not xml.exists():
-            raise FileNotFoundError(f"IR tidak ditemukan: {xml}")
+            raise FileNotFoundError(f"IR not found: {xml}")
 
         print(f"[guard] tokenizer ...", flush=True)
         tok_src = str(model_dir) if (model_dir / "tokenizer.json").exists() \
@@ -82,13 +83,13 @@ class Engine:
         t0 = time.time()
         core = ov.Core()
         if device not in core.available_devices:
-            raise RuntimeError(f"device {device} tidak tersedia. ada: {core.available_devices}")
+            raise RuntimeError(f"device {device} is not available. available: {core.available_devices}")
         self.compiled = core.compile_model(core.read_model(str(xml)), device)
         self.req = self.compiled.create_infer_request()
         self.compile_s = time.time() - t0
         print(f"[guard] compiled in {self.compile_s:.2f}s")
 
-        # warmup + verifikasi angka referensi
+        # warmup + verify against the reference numbers
         t0 = time.time()
         w = self.raw("warmup probe")
         self.warmup_ms = (time.time() - t0) * 1000
@@ -120,21 +121,22 @@ class Engine:
         e = np.exp(logits - logits.max())
         probs = e / e.sum()
 
-        # clamp head regresi ke [0,1] — head linear tanpa sigmoid bisa keluar rentang
+        # clamp the regression heads to [0,1] — a linear head without a sigmoid
+        # can produce values outside that range
         inj_c = float(np.clip(inj, 0.0, 1.0))
         sh_c = float(np.clip(sh, 0.0, 1.0))
 
-        # backstop keyword: shell_head undertrained, jangan andalkan ia sendirian
+        # keyword backstop: shell_head is undertrained, do not rely on it alone
         low = payload.lower()
         hits = [k for k in _SHELL_KW if k in low]
         kw_shell = min(0.4 * len(hits), 1.0)
         shell_final = max(sh_c, kw_shell)
 
         action = ACTIONS[int(probs.argmax())]
-        # gate: kalau head aksi bilang PASS tapi skor melewati threshold, naikkan
+        # gate: if the action head says PASS but a score crosses the threshold, escalate
         if action == "PASS" and max(inj_c, shell_final) >= THRESHOLD:
             action = "ISOLATE_FILE" if shell_final > inj_c else "PAUSE_AGENTS"
-        # sebaliknya: skor sangat rendah dan tak ada keyword -> PASS
+        # conversely: very low scores and no keyword hits -> PASS
         if max(inj_c, shell_final) < THRESHOLD and not hits:
             action = "PASS"
 
@@ -169,7 +171,7 @@ class GuardHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path != "/health":
-            self._json(404, {"error": "endpoint tidak dikenal"})
+            self._json(404, {"error": "unknown endpoint"})
             return
         e = self.engine
         lat = e.latencies
@@ -184,17 +186,17 @@ class GuardHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         if self.path != "/scan":
-            self._json(404, {"error": "endpoint tidak dikenal"})
+            self._json(404, {"error": "unknown endpoint"})
             return
         try:
             n = int(self.headers.get("Content-Length", 0))
             data = json.loads(self.rfile.read(n))
         except Exception as ex:
-            self._json(400, {"error": f"JSON tidak valid: {ex}"})
+            self._json(400, {"error": f"invalid JSON: {ex}"})
             return
         text = data.get("text", "")
         if not text:
-            self._json(400, {"error": "field 'text' wajib"})
+            self._json(400, {"error": "field 'text' is required"})
             return
         try:
             self._json(200, self.engine.scan(text, data.get("context", "")))
@@ -211,12 +213,12 @@ def main():
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), GuardHandler)
     print(f"[guard] listening on http://127.0.0.1:{PORT}  (POST /scan, GET /health)")
     print(f"[guard] device={DEVICE} threshold={THRESHOLD} model={MODEL_DIR}")
-    print("[guard] CATATAN KEAMANAN: server bind ke 127.0.0.1 tanpa autentikasi. "
-          "Jangan expose ke 0.0.0.0 tanpa menambahkan auth.")
+    print("[guard] SECURITY NOTICE: this server binds to 127.0.0.1 with NO authentication. "
+          "Do NOT expose it on 0.0.0.0 without adding auth first.")
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
-        print("\n[guard] berhenti.")
+        print("\n[guard] stopped.")
 
 
 if __name__ == "__main__":

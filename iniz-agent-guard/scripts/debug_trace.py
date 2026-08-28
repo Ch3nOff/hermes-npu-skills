@@ -1,8 +1,8 @@
 """
-debug_trace.py — isolasi kegagalan export: torch.jit.trace vs torch.export vs ONNX.
+debug_trace.py — isolate export failures: torch.jit.trace vs torch.export vs ONNX.
 
-Tujuan: menemukan jalur konversi yang benar-benar berhasil untuk backbone
-Qwen2Model + 3 head, sebelum diserahkan ke ov.convert_model.
+Goal: find the conversion path that actually works for the Qwen2Model backbone
+with its 3 heads, before handing it over to ov.convert_model.
 """
 
 import traceback
@@ -62,7 +62,7 @@ def main():
         ref = w(ids, mask)
     print(f"eager ref: {[float(x.flatten()[0]) for x in ref]}")
 
-    # 1. jit.trace langsung
+    # 1. jit.trace directly
     def t1():
         with torch.no_grad():
             m = torch.jit.trace(w, (ids, mask), strict=False, check_trace=False)
@@ -96,7 +96,7 @@ def main():
         return f"{os.path.getsize('guard_ts.onnx')/1e6:.1f} MB"
     ok_onnx_ts = attempt("torch.onnx.export(dynamo=False)", t4)
 
-    print("\n=== RINGKASAN ===")
+    print("\n=== SUMMARY ===")
     for n, v in [("jit.trace", ok_trace), ("torch.export", ok_export),
                  ("onnx dynamo", ok_onnx_dynamo), ("onnx torchscript", ok_onnx_ts)]:
         print(f"  {n:20s} {'OK' if v else 'FAIL'}")

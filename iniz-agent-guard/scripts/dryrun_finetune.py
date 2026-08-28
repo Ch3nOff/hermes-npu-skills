@@ -1,17 +1,18 @@
 """
-dryrun_finetune.py — menguji apakah finetune_local.py dari paket
-iniz-agent-guard-fixed.zip BENAR-BENAR jalan, bukan cuma "terlihat benar".
+dryrun_finetune.py — tests whether finetune_local.py from the
+iniz-agent-guard-fixed.zip package ACTUALLY runs, instead of merely "looking
+correct".
 
-Paket itu sendiri mengakui: "skrip ini BELUM dijalankan end-to-end".
-Skrip ini menjalankannya dengan modifikasi minimal:
-  * dataset dipotong ke N kecil (default 64 train / 32 val)
-  * max_steps=3 supaya trainer.train() benar-benar dieksekusi tapi cepat
-  * CPU (mesin ini punya torch CPU-only di venv), bf16/fp16 dimatikan
-  * gradient_checkpointing dimatikan (butuh grad pada input embed; di CPU
-    tanpa GPU ini hanya memperlambat)
+The package itself admits: "this script has NOT been run end-to-end".
+This script runs it with minimal modifications:
+  * dataset trimmed to a small N (default 64 train / 32 val)
+  * max_steps=3 so trainer.train() really executes but finishes quickly
+  * CPU (this machine has CPU-only torch in the venv), bf16/fp16 disabled
+  * gradient_checkpointing disabled (it needs grad on the input embeddings; on
+    CPU without a GPU it only slows things down)
 
-Yang diuji: import, label mapping, dataset class, GuardHeadModel.forward,
-loss backward, dan trainer.train() sampai selesai tanpa exception.
+What is tested: imports, label mapping, dataset class, GuardHeadModel.forward,
+loss backward, and trainer.train() running to completion without exceptions.
 """
 
 import os
@@ -29,22 +30,22 @@ INCOMING = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 sys.path.insert(0, INCOMING)
 
 print("=" * 70)
-print("DRY RUN: finetune_local.py dari paket incoming")
+print("DRY RUN: finetune_local.py from the incoming package")
 print("=" * 70)
 
-# ---- import modul tanpa menjalankan main() ----
+# ---- import the module without running main() ----
 import importlib.util
 spec = importlib.util.spec_from_file_location(
     "incoming_finetune", os.path.join(INCOMING, "finetune_local.py"))
 mod = importlib.util.module_from_spec(spec)
 try:
     spec.loader.exec_module(mod)
-    print("[1/6] import modul + guard HF_TOKEN: OK")
+    print("[1/6] module import + HF_TOKEN guard: OK")
 except Exception as e:
-    print(f"[1/6] GAGAL import: {type(e).__name__}: {e}")
+    print(f"[1/6] import FAILED: {type(e).__name__}: {e}")
     raise
 
-# ---- label mapping pada data lokal (tanpa akses jaringan) ----
+# ---- label mapping on local data (no network access) ----
 try:
     train = pd.read_parquet("data/full-train.parquet").head(64).reset_index(drop=True)
     val = pd.read_parquet("data/full-validation.parquet").head(32).reset_index(drop=True)
@@ -53,7 +54,7 @@ try:
     print(f"[2/6] map_labels: OK  dist={train['action'].value_counts().to_dict()}")
     print(f"      shell values: {sorted(train['shell'].unique())}")
 except Exception as e:
-    print(f"[2/6] GAGAL map_labels: {type(e).__name__}: {e}")
+    print(f"[2/6] map_labels FAILED: {type(e).__name__}: {e}")
     raise
 
 # ---- tokenizer + dataset ----
@@ -69,7 +70,7 @@ b = train_ds[0]
 print(f"[3/6] GuardDataset: OK  keys={sorted(b.keys())} "
       f"input_ids={tuple(b['input_ids'].shape)}")
 
-# ---- model 3-head ----
+# ---- 3-head model ----
 dtype = torch.float32
 backbone = AutoModel.from_pretrained(mod.BASE_MODEL, dtype=dtype)
 backbone.config.use_cache = False
@@ -83,7 +84,7 @@ n_all = sum(p.numel() for p in guard.parameters())
 print(f"[4/6] GuardHeadModel: OK  trainable={n_train:,} / {n_all:,} "
       f"({100*n_train/n_all:.3f}%)")
 
-# ---- forward + backward manual ----
+# ---- manual forward + backward ----
 try:
     batch = mod.guard_collator([train_ds[i] for i in range(2)])
     out = guard(**batch)
@@ -91,12 +92,12 @@ try:
           f"inj={out['injection'].tolist()} act={tuple(out['action'].shape)}")
     out["loss"].backward()
     grads = [p.grad is not None for n, p in guard.named_parameters() if p.requires_grad]
-    print(f"      backward: OK  param dgn grad = {sum(grads)}/{len(grads)}")
+    print(f"      backward: OK  params with grad = {sum(grads)}/{len(grads)}")
 except Exception as e:
-    print(f"[5/6] GAGAL forward/backward: {type(e).__name__}: {e}")
+    print(f"[5/6] forward/backward FAILED: {type(e).__name__}: {e}")
     raise
 
-# ---- trainer.train() 3 step ----
+# ---- trainer.train() for 3 steps ----
 try:
     guard.zero_grad(set_to_none=True)
     args = TrainingArguments(
@@ -122,12 +123,12 @@ try:
     print(f"[6/6] trainer.train(): OK  steps={res.global_step} "
           f"train_loss={res.training_loss:.4f}")
 except Exception as e:
-    print(f"[6/6] GAGAL trainer.train(): {type(e).__name__}: {e}")
+    print(f"[6/6] trainer.train() FAILED: {type(e).__name__}: {e}")
     import traceback
     traceback.print_exc(limit=8)
     raise
 
 print("\n" + "=" * 70)
-print("VERDICT: finetune_local.py dari paket incoming JALAN end-to-end")
-print("(dengan max_steps=3, CPU fp32, gradient_checkpointing off)")
+print("VERDICT: finetune_local.py from the incoming package RUNS end-to-end")
+print("(with max_steps=3, CPU fp32, gradient_checkpointing off)")
 print("=" * 70)

@@ -1,12 +1,12 @@
 """
-upload_hf.py — upload artefak Iniz Agent Guard ke HuggingFace Hub.
+upload_hf.py — upload the Iniz Agent Guard artifacts to the HuggingFace Hub.
 
-Yang di-upload:
-  openvino/           IR INT8 seq_len=128 (siap pakai di NPU)  ~495 MB
-  checkpoint/         model.safetensors 3-head + tokenizer      ~992 MB
-  README.md           model card dengan angka terukur
+What gets uploaded:
+  openvino/           IR INT8 seq_len=128 (ready to run on NPU)  ~495 MB
+  checkpoint/         model.safetensors 3-head + tokenizer        ~992 MB
+  README.md           model card with measured numbers
 
-Token dibaca dari cache `hf auth login` (jangan hardcode).
+The token is read from the `hf auth login` cache (never hardcode it).
 """
 
 import os
@@ -29,16 +29,16 @@ def main():
     create_repo(REPO_ID, repo_type="model", exist_ok=True)
     print(f"repo ready: https://huggingface.co/{REPO_ID}")
 
-    # 1. IR OpenVINO INT8 (siap pakai)
-    print(f"\nupload IR dari {IR} ...", flush=True)
+    # 1. OpenVINO INT8 IR (ready to use)
+    print(f"\nuploading IR from {IR} ...", flush=True)
     api.upload_folder(
         repo_id=REPO_ID, folder_path=str(IR), path_in_repo="openvino",
         commit_message="Add OpenVINO IR INT8 (seq_len=128, NPU-ready)",
     )
     print("IR OK")
 
-    # 2. checkpoint mentah (untuk retrain / export ulang)
-    print(f"\nupload checkpoint dari {CKPT} ...", flush=True)
+    # 2. raw checkpoint (for retraining / re-export)
+    print(f"\nuploading checkpoint from {CKPT} ...", flush=True)
     api.upload_folder(
         repo_id=REPO_ID, folder_path=str(CKPT), path_in_repo="checkpoint",
         allow_patterns=["model.safetensors", "tokenizer.json",

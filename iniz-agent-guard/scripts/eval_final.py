@@ -1,15 +1,15 @@
 """
-eval_final.py — evaluasi produksi FINAL memakai:
-  * IR INT8 di NPU
-  * mapping label TERVALIDASI dari guard_labels.py (mapping paket incoming,
-    terbukti +0.39 macro-F1 vs mapping notebook lama)
+eval_final.py — FINAL production evaluation using:
+  * INT8 IR on the NPU
+  * the VALIDATED label mapping from guard_labels.py (the incoming package
+    mapping, proven +0.39 macro-F1 over the old notebook mapping)
 
-Menghasilkan per-split:
-  * metrik action (accuracy, macro-F1, per-class P/R/F1, confusion)
-  * MAE + ROC-AUC untuk head injection & shell
-  * sweep threshold injection untuk gate biner attack-vs-benign
-  * latensi nyata p50/p90
-  * crosstab kategori x action prediksi
+Produces, per split:
+  * action metrics (accuracy, macro-F1, per-class P/R/F1, confusion)
+  * MAE + ROC-AUC for the injection & shell heads
+  * injection threshold sweep for the binary attack-vs-benign gate
+  * real measured p50/p90 latency
+  * crosstab of category x predicted action
 """
 
 import argparse
@@ -69,7 +69,7 @@ def main():
     req = compiled.create_infer_request()
 
     out = {"model": args.model, "device": args.device, "seq_len": S,
-           "label_mapping": "guard_labels.py (tervalidasi)", "splits": {}}
+           "label_mapping": "guard_labels.py (validated)", "splits": {}}
 
     for split in args.splits.split(","):
         split = split.strip()
@@ -107,7 +107,7 @@ def main():
 
         acc = float((act_p == act_t).mean())
         rows, mf1 = per_class(act_t, act_p, 4)
-        print(f"\naction: accuracy={acc:.4f}  macro-F1(kelas ada)={mf1:.4f}")
+        print(f"\naction: accuracy={acc:.4f}  macro-F1(present classes)={mf1:.4f}")
         print(f"{'action':<20}{'support':>9}{'prec':>9}{'recall':>9}{'f1':>9}")
         for r in rows:
             print(f"{r['action']:<20}{r['support']:>9}{r['precision']:>9.4f}"
@@ -121,7 +121,7 @@ def main():
         mae_i = float(np.abs(inj_p - inj_t).mean())
         mae_s = float(np.abs(sh_p - sh_t).mean())
         auc_i = float(roc_auc_score(lab, inj_p))
-        # AUC shell: apakah shell head bisa membedakan proxy-hit (0.6) vs bukan
+        # AUC shell: can the shell head separate proxy-hit (0.6) from non-hit?
         sh_bin = (sh_t >= 0.6).astype(int)
         auc_s = float(roc_auc_score(sh_bin, sh_p)) if sh_bin.sum() else float("nan")
         print(f"\ninjection: MAE={mae_i:.4f}  ROC-AUC(attack)={auc_i:.4f}")
@@ -149,11 +149,11 @@ def main():
             sweep.append(e)
             if best is None or f1b > best["F1"]:
                 best = e
-        print(f"threshold terbaik: {best}")
+        print(f"best threshold: {best}")
 
         df2 = df.assign(p_action=[ACTIONS[i] for i in act_p])
         ct = pd.crosstab(df2["category"], df2["p_action"])
-        print(f"\nkategori x action prediksi:\n{ct.to_string()}")
+        print(f"\ncategory x predicted action:\n{ct.to_string()}")
 
         out["splits"][split] = {
             "n": len(df), "latency_p50_ms": round(p50, 1), "latency_p90_ms": round(p90, 1),

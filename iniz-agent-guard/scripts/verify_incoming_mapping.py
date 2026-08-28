@@ -1,20 +1,20 @@
 """
-verify_incoming_mapping.py — menguji apakah label mapping di paket
-iniz-agent-guard-fixed.zip adalah mapping yang BENAR-BENAR dipakai saat training.
+verify_incoming_mapping.py — tests whether the label mapping in the
+iniz-agent-guard-fixed.zip package is the mapping ACTUALLY used during training.
 
-Paket itu mengklaim mapping:
+That package claims the mapping:
     OVERRIDE_CATEGORIES    -> PAUSE_AGENTS
     OBFUSCATION_CATEGORIES -> ISOLATE_FILE
     EXTRACTION_CATEGORIES  -> USER_CONFIRMATION
-    sisanya (label=1)      -> PAUSE_AGENTS
+    everything else (label=1) -> PAUSE_AGENTS
     label=0                -> PASS
-plus shell = proxy keyword (0.0 / 0.1 / 0.6), BUKAN 0.9 seperti notebook lama.
+plus shell = keyword proxy (0.0 / 0.1 / 0.6), NOT 0.9 as in the old notebook.
 
-Ini dibandingkan head-to-head dengan mapping notebook lama. Model hasil training
-adalah hakim: mapping yang benar akan menghasilkan accuracy & macro-F1 jauh lebih
-tinggi, dan MAE shell lebih rendah.
+This is compared head-to-head with the old notebook mapping. The trained model is
+the judge: the correct mapping will yield far higher accuracy & macro-F1, and a
+lower shell MAE.
 
-Dijalankan lewat IR INT8 di NPU (angka produksi).
+Run through the INT8 IR on the NPU (production numbers).
 """
 
 import json
@@ -29,7 +29,7 @@ ACTIONS = ["PASS", "PAUSE_AGENTS", "ISOLATE_FILE", "USER_CONFIRMATION"]
 ACTION2IDX = {a: i for i, a in enumerate(ACTIONS)}
 SEVERITY_MAP = {"low": 0.3, "medium": 0.5, "high": 0.7, "critical": 0.9}
 
-# ---------- mapping A: notebook lama (yang saya pakai sebelumnya) ----------
+# ---------- mapping A: old notebook (what I used previously) ----------
 A_PAUSE = {"direct_injection", "prompt_extraction", "system_extraction", "agent_manipulation"}
 
 
@@ -49,7 +49,7 @@ def map_old(row):
     return pd.Series({"inj": inj, "shell": sh, "action": act})
 
 
-# ---------- mapping B: paket incoming (iniz-agent-guard-fixed.zip) ----------
+# ---------- mapping B: incoming package (iniz-agent-guard-fixed.zip) ----------
 B_OVERRIDE = {"direct_injection", "jailbreak", "persona_replacement", "many_shot", "crescendo"}
 B_OBFUSCATION = {"encoding_obfuscation", "token_smuggling", "indirect_injection", "context_overflow"}
 B_EXTRACTION = {"system_extraction", "prompt_leaking"}
@@ -159,10 +159,10 @@ def main():
         t0 = time.time()
         inj_p, sh_p, act_p = score_split(compiled, tok, df, S)
         print(f"  scored in {time.time()-t0:.0f}s")
-        ra = report("A (notebook lama)", df, inj_p, sh_p, act_p, map_old)
+        ra = report("A (old notebook)", df, inj_p, sh_p, act_p, map_old)
         rb = report("B (incoming zip)", df, inj_p, sh_p, act_p, map_incoming)
         winner = "B" if rb["macro_f1"] > ra["macro_f1"] else "A"
-        print(f"\n  >>> PEMENANG {split}: mapping {winner} "
+        print(f"\n  >>> WINNER {split}: mapping {winner} "
               f"(macro-F1 {max(ra['macro_f1'], rb['macro_f1']):.4f} vs "
               f"{min(ra['macro_f1'], rb['macro_f1']):.4f})")
         out[split] = {"A": ra, "B": rb, "winner": winner}

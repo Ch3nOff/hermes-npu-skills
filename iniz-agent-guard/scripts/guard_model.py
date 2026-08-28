@@ -1,30 +1,30 @@
 """
-guard_model.py — rekonstruksi arsitektur model hasil fine-tuning
+guard_model.py — reconstruction of the fine-tuned model architecture
 (lora_adapter.zip / checkpoint-2634).
 
-CATATAN: rekonstruksi ini sudah DIVERIFIKASI identik dengan GuardHeadModel di
-finetune_local.py — 488 kunci state_dict sama persis, 11/11 hyperparameter cocok
-(lihat scripts/verify_arch_match.py). Untuk melatih dari awal pakai
-finetune_local.py; modul ini untuk memuat checkpoint yang sudah ada.
+NOTE: this reconstruction has been VERIFIED identical to GuardHeadModel in
+finetune_local.py — all 488 state_dict keys match exactly, 11/11 hyperparameters
+agree (see scripts/verify_arch_match.py). To train from scratch use
+finetune_local.py; this module is for loading the existing checkpoint.
 
-Struktur state_dict yang ditemukan di model.safetensors:
+state_dict structure found in model.safetensors:
 
     base.base_model.model.embed_tokens.weight                       -> Qwen2Model
     base.base_model.model.layers.{0..23}.self_attn.{q,k,v,o}_proj.base_layer.*
     base.base_model.model.layers.{0..23}.self_attn.{q,k,v,o}_proj.lora_{A,B}.default.weight
-    base.base_model.model.layers.{0..23}.mlp.{gate,up,down}_proj.weight   (tanpa LoRA)
+    base.base_model.model.layers.{0..23}.mlp.{gate,up,down}_proj.weight   (no LoRA)
     base.base_model.model.norm.weight
     inj_head.{weight,bias}      [1, 896]
     shell_head.{weight,bias}    [1, 896]
     action_head.{weight,bias}   [4, 896]
 
-Artinya:
-  * backbone = Qwen2Model (AutoModel, TANPA lm_head)  -> keluaran last_hidden_state
-  * dibungkus PeftModel(LoraModel(Qwen2Model)) dengan target q/k/v/o_proj, r=8
-  * 3 linear head di atas hidden state (hidden_size=896)
+Which means:
+  * backbone = Qwen2Model (AutoModel, WITHOUT lm_head)  -> emits last_hidden_state
+  * wrapped in PeftModel(LoraModel(Qwen2Model)) targeting q/k/v/o_proj, r=8
+  * 3 linear heads on top of the hidden state (hidden_size=896)
 
-Tidak ada lm_head -> ini classifier/regressor, BUKAN generative model.
-Karena itu ia tidak bisa dilayani lewat openvino_genai.LLMPipeline.
+There is no lm_head -> this is a classifier/regressor, NOT a generative model.
+That is why it cannot be served through openvino_genai.LLMPipeline.
 """
 
 import torch
@@ -36,7 +36,7 @@ BASE_MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
 
 
 def build_backbone(dtype=torch.float32, lora_r=8, lora_alpha=32):
-    """Qwen2Model + LoRA (q,k,v,o) — struktur identik dengan checkpoint."""
+    """Qwen2Model + LoRA (q,k,v,o) — structure identical to the checkpoint."""
     from transformers import AutoModel
     from peft import LoraConfig, get_peft_model
 
@@ -47,22 +47,23 @@ def build_backbone(dtype=torch.float32, lora_r=8, lora_alpha=32):
         lora_dropout=0.0,
         target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
         bias="none",
-        task_type=None,          # bukan CAUSAL_LM: tidak ada lm_head
+        task_type=None,          # not CAUSAL_LM: there is no lm_head
     )
     return get_peft_model(backbone, cfg)
 
 
 class GuardModel(nn.Module):
     """
-    Multi-task guard: 2 regresi (injection, shell) + 1 klasifikasi (action, 4 kelas).
+    Multi-task guard: 2 regressions (injection, shell) + 1 classification
+    (action, 4 classes).
 
     pooling:
-      'last_nonpad' -> hidden state token terakhir yang bukan padding
+      'last_nonpad' -> hidden state of the last non-padding token
       'last'        -> hidden[:, -1]
-      'mean'        -> rata-rata dengan mask
+      'mean'        -> mask-weighted average
       'first'       -> hidden[:, 0]
-    Strategi pooling yang benar tidak tersimpan di checkpoint, jadi dipilih
-    secara empiris (lihat eval_guard.py).
+    The correct pooling strategy is not stored in the checkpoint, so it is chosen
+    empirically (see eval_guard.py).
     """
 
     def __init__(self, hidden_size=896, n_actions=4, pooling="last_nonpad", dtype=torch.float32):
@@ -98,7 +99,7 @@ class GuardModel(nn.Module):
 
 
 def load_checkpoint(path, pooling="last_nonpad", dtype=torch.float32, verbose=True):
-    """Load model.safetensors hasil training ke GuardModel. Return (model, report)."""
+    """Load the trained model.safetensors into GuardModel. Returns (model, report)."""
     from safetensors.torch import load_file
 
     sd = load_file(path)
@@ -106,8 +107,9 @@ def load_checkpoint(path, pooling="last_nonpad", dtype=torch.float32, verbose=Tr
     sd = {k: v.to(dtype) for k, v in sd.items()}
     missing, unexpected = model.load_state_dict(sd, strict=False)
 
-    # Qwen2.5 tie_word_embeddings: lm_head tidak ada di backbone AutoModel,
-    # jadi tidak ada kunci yang wajar hilang selain rotary buffer non-persistent.
+    # Qwen2.5 tie_word_embeddings: lm_head is absent from the AutoModel backbone,
+    # so no key should legitimately be missing apart from non-persistent rotary
+    # buffers.
     report = {"missing": list(missing), "unexpected": list(unexpected)}
     if verbose:
         print(f"[load] tensors in file : {len(sd)}")

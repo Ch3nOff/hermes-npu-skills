@@ -1,6 +1,6 @@
 """
-smoke_client.py — uji end-to-end guard_server lewat HTTP nyata.
-Menampilkan hasil per-kasus + statistik latensi p50/p90 dari sisi klien.
+smoke_client.py — end-to-end test of guard_server over real HTTP.
+Prints per-case results plus client-side p50/p90 latency statistics.
 """
 
 import json
@@ -65,7 +65,7 @@ def main():
     print(f"client latency p50={statistics.median(lat):.1f}ms "
           f"p90={sorted(lat)[int(.9*len(lat))-1]:.1f}ms")
 
-    print("\n=== /health setelah beban ===")
+    print("\n=== /health after the workload ===")
     h2 = get("/health")
     print(f"  requests_served={h2['requests_served']} latency_p50_ms={h2['latency_p50_ms']}")
 

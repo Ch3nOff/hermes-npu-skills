@@ -1,13 +1,17 @@
 """
-infer_mapping.py — reverse-engineer label mapping yang SEBENARNYA dipakai saat
-training checkpoint (lora_adapter), dengan cara membandingkan prediksi model
-terhadap kategori/severity asli dataset.
+SUPERSEDED: this is an early script; use scripts/verify_incoming_mapping.py
+instead (this one relies on an outdated label mapping).
 
-Alasan: notebook 05 (cell 3) menuliskan satu mapping, tapi confusion matrix hasil
-eval menunjukkan kelas USER_CONFIRMATION tidak pernah diprediksi — indikasi
-mapping saat training berbeda. Model adalah sumber kebenaran di sini.
+infer_mapping.py — reverse-engineer the label mapping that was ACTUALLY used
+when the checkpoint (lora_adapter) was trained, by comparing the model's
+predictions against the dataset's original category/severity.
 
-Output: tabel kategori x (mean inj, mean shell, modus action prediksi).
+Reason: notebook 05 (cell 3) writes down one mapping, but the eval confusion
+matrix shows the USER_CONFIRMATION class is never predicted — an indication
+that the mapping used during training was different. The model is the source
+of truth here.
+
+Output: a table of category x (mean inj, mean shell, modal predicted action).
 """
 
 import numpy as np
@@ -28,9 +32,9 @@ def main():
 
     model, _ = load_checkpoint("ckpt/model.safetensors", pooling="last_nonpad", verbose=False)
 
-    # ambil train split: mapping training tercermin paling kuat di data latih
+    # use the train split: the training mapping shows up most strongly there
     df = pd.read_parquet("data/full-train.parquet")
-    # sampel proporsional per kategori, minimal 8 / maksimal 40 per kategori
+    # proportional sample per category, min 8 / max 40 per category
     parts = []
     for cat, g in df.groupby("category"):
         n = int(np.clip(len(g), 0, 40))
@@ -56,7 +60,7 @@ def main():
     sub["p_shell"] = np.concatenate(sh)
     sub["p_action"] = [ACTIONS[i] for i in np.concatenate(act)]
 
-    print("\n=== per-kategori (prediksi model) ===")
+    print("\n=== per-category (model predictions) ===")
     g = sub.groupby("category").agg(
         n=("text", "size"),
         inj=("p_inj", "mean"),
@@ -76,10 +80,10 @@ def main():
         lambda s: s.value_counts().index[0])
     print(gs.round(3).to_string())
 
-    print("\n=== distribusi action prediksi keseluruhan ===")
+    print("\n=== overall predicted action distribution ===")
     print(sub["p_action"].value_counts().to_dict())
 
-    print("\n=== apakah shell head aktif? kategori dgn shell tertinggi ===")
+    print("\n=== is the shell head active? categories with the highest shell ===")
     print(g.sort_values("shell", ascending=False)[["n", "shell", "inj"]].head(8).round(3).to_string())
 
     sub[["text", "label", "category", "severity", "p_inj", "p_shell", "p_action"]].to_csv(

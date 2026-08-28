@@ -1,13 +1,17 @@
 """
-eval_guard.py — evaluasi NYATA checkpoint fine-tuned di split validation/test.
+SUPERSEDED: this is an early script; use scripts/eval_final.py instead
+(this one relies on an outdated label mapping).
 
-Metrik:
+eval_guard.py — REAL evaluation of the fine-tuned checkpoint on the
+validation/test split.
+
+Metrics:
   - action: accuracy, macro-F1, confusion matrix
-  - injection / shell: MAE terhadap label mapping notebook
-  - binary gate: apakah "bukan PASS" mendeteksi label=1 (precision/recall/F1)
+  - injection / shell: MAE against the notebook's label mapping
+  - binary gate: does "not PASS" detect label=1 (precision/recall/F1)
 
-Juga membandingkan strategi pooling (last_nonpad / mean / last / first),
-karena checkpoint tidak menyimpan informasi ini.
+It also compares pooling strategies (last_nonpad / mean / last / first),
+because the checkpoint does not store that information.
 
 Usage:
   python eval_guard.py --split validation --pooling last_nonpad --limit 0
@@ -25,8 +29,8 @@ from guard_model import load_checkpoint, ACTIONS, ACTION2IDX
 
 SEVERITY_MAP = {"low": 0.3, "medium": 0.5, "high": 0.7, "critical": 0.9}
 
-# Mapping label dari notebook 05 (cell 3). Kategori di luar daftar eksplisit
-# jatuh ke USER_CONFIRMATION.
+# Label mapping from notebook 05 (cell 3). Categories outside the explicit
+# lists fall back to USER_CONFIRMATION.
 PAUSE_CATS = {"direct_injection", "prompt_extraction", "system_extraction", "agent_manipulation"}
 ISOLATE_CATS = {"code_execution", "instruction_override"}
 
@@ -93,7 +97,7 @@ def report(df, inj_p, sh_p, act_p, elapsed, tag):
     mae_i = float(np.abs(inj_p - inj_t).mean())
     mae_s = float(np.abs(sh_p - sh_t).mean())
 
-    # binary gate: prediksi bukan-PASS == "berbahaya"
+    # binary gate: a non-PASS prediction means "dangerous"
     pred_bad = (act_p != 0).astype(int)
     tp = int(((pred_bad == 1) & (lab == 1)).sum())
     fp = int(((pred_bad == 1) & (lab == 0)).sum())

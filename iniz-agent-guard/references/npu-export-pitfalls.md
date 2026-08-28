@@ -1,19 +1,19 @@
-# NPU Export Pitfalls — traceback nyata per jalur
+# NPU Export Pitfalls — real tracebacks per path
 
-Semua hasil di bawah diukur di mesin ini (Core Ultra 9 275HX, Windows 11,
-torch 2.9.1+cpu, transformers 4.57.1, openvino 2026.3.0) pada
-`Qwen2Model` + 3 linear head, LoRA r=8 sudah di-merge, `seq_len=192`.
+All results below were measured on this machine (Core Ultra 9 275HX, Windows 11,
+torch 2.9.1+cpu, transformers 4.57.1, openvino 2026.3.0) on
+`Qwen2Model` + 3 linear heads, LoRA r=8 already merged, `seq_len=192`.
 
-Skrip pembanding: `~/npu-provider/work/debug_trace.py`
+Comparison script: `~/npu-provider/work/debug_trace.py`
 
-## Ringkasan
+## Summary
 
-| Jalur | Hasil |
+| Path | Result |
 |---|---|
 | `torch.jit.trace(model, args, strict=False)` | **FAIL** |
 | `torch.export.export(model, args, strict=False)` | **OK** |
 | `torch.onnx.export(..., dynamo=True)` | FAIL (dependency) |
-| `torch.onnx.export(..., dynamo=False)` | **FAIL** (sama seperti jit.trace) |
+| `torch.onnx.export(..., dynamo=False)` | **FAIL** (same as jit.trace) |
 
 ## 1. torch.jit.trace — FAIL
 
@@ -22,17 +22,18 @@ Skrip pembanding: `~/npu-provider/work/debug_trace.py`
 RuntimeError: invalid unordered_map<K, T> key
 ```
 
-Sumber: `transformers/masking_utils.py`. Walrus operator di dalam kondisi yang
-bergantung pada `attention_mask.shape` membuat TorchScript gagal membangun peta
-tipe. Mengubah `attn_implementation` ke `eager` **tidak** menolong — error tetap
-sama, karena masalahnya di kode masking, bukan di implementasi attention.
+Source: `transformers/masking_utils.py`. A walrus operator inside a condition
+that depends on `attention_mask.shape` makes TorchScript fail to build the type
+map. Changing `attn_implementation` to `eager` does **not** help — the error
+stays the same, because the problem is in the masking code, not in the attention
+implementation.
 
-Jangan buang waktu mencoba:
-- `strict=True` / `strict=False` — keduanya gagal
-- `check_trace=False` — gagal di tahap sebelum pengecekan
-- `example_input` dengan mask semua-1 — gagal
-- `ov.convert_model(model, example_input=...)` — gagal, karena internal-nya
-  memanggil `TorchScriptPythonDecoder` → `jit.trace`:
+Do not waste time trying:
+- `strict=True` / `strict=False` — both fail
+- `check_trace=False` — fails at a stage before the check
+- `example_input` with an all-ones mask — fails
+- `ov.convert_model(model, example_input=...)` — fails, because internally it
+  calls `TorchScriptPythonDecoder` → `jit.trace`:
 
 ```
 File "openvino/tools/ovc/moc_frontend/pytorch_frontend_utils.py", line 162, in get_pytorch_decoder
@@ -41,30 +42,30 @@ File "openvino/frontend/pytorch/ts_decoder.py", line 84, in __init__
     raise RuntimeError("Couldn't get TorchScript module by tracing.")
 ```
 
-## 2. torch.export.export — OK (jalur yang dipakai)
+## 2. torch.export.export — OK (the path actually used)
 
 ```python
 model.config._attn_implementation = "eager"
 model.config.use_cache = False
 with torch.no_grad():
     ep = torch.export.export(wrapper, (ex_ids, ex_mask), strict=False)
-ov_model = ov.convert_model(ep)          # terima ExportedProgram langsung
+ov_model = ov.convert_model(ep)          # accepts the ExportedProgram directly
 ov_model.reshape({0: ov.PartialShape([1, S]), 1: ov.PartialShape([1, S])})
 ```
 
-Dua langkah yang mudah terlewat:
+Two steps that are easy to miss:
 
-1. **`eager` wajib.** Tanpa itu jalur sdpa ikut ter-export dan hasilnya tidak
-   compile bersih di NPU.
-2. **`reshape` wajib.** `torch.export` melaporkan input sebagai `[?,?]`
-   walaupun example input `[1,192]`:
+1. **`eager` is required.** Without it the sdpa path gets exported too and the
+   result does not compile cleanly on the NPU.
+2. **`reshape` is required.** `torch.export` reports the inputs as `[?,?]`
+   even though the example input is `[1,192]`:
 
    ```
-   [export] inputs : [('input_ids', '[?,?]', 'i64'), ('attention_mask', '[?,?]', 'i64')]   # sebelum reshape
-   [export] inputs : [('input_ids', '[1,192]', 'i64'), ('attention_mask', '[1,192]', 'i64')] # sesudah
+   [export] inputs : [('input_ids', '[?,?]', 'i64'), ('attention_mask', '[?,?]', 'i64')]   # before reshape
+   [export] inputs : [('input_ids', '[1,192]', 'i64'), ('attention_mask', '[1,192]', 'i64')] # after
    ```
 
-   NPU tidak menerima dimensi dinamis.
+   The NPU does not accept dynamic dimensions.
 
 ## 3. torch.onnx.export(dynamo=True) — FAIL (dependency)
 
@@ -72,30 +73,30 @@ Dua langkah yang mudah terlewat:
 ModuleNotFoundError: No module named 'onnxscript'
 ```
 
-Bisa diperbaiki dengan `pip install onnxscript`, tapi tidak perlu: jalur
-`torch.export` sudah berhasil dan lebih pendek (tanpa perantara ONNX).
+This can be fixed with `pip install onnxscript`, but there is no need: the
+`torch.export` path already succeeds and is shorter (no ONNX intermediary).
 
 ## 4. torch.onnx.export(dynamo=False) — FAIL
 
-Sama dengan jalur 1 — exporter legacy memakai TorchScript di belakang:
+Same as path 1 — the legacy exporter uses TorchScript underneath:
 
 ```
 RuntimeError: invalid unordered_map<K, T> key
 ```
 
-## Referensi angka export
+## Export size reference
 
-| Artefak | Ukuran |
+| Artifact | Size |
 |---|---|
 | `iniz-guard-fp16-ov/guard.bin` | 988.2 MB |
 | `iniz-guard-int8-ov/guard.bin` | 495.3 MB |
 
-`nncf.compress_weights(mode=INT8_SYM)`: 172/172 layer terkompresi (100 %),
-per-channel, selesai dalam ~5 s.
+`nncf.compress_weights(mode=INT8_SYM)`: 172/172 layers compressed (100 %),
+per-channel, finished in ~5 s.
 
-## Pemetaan LUID counter Windows (mesin ini)
+## Windows LUID counter mapping (this machine)
 
-Windows 11 build ini **tidak punya** counter set `NPU`:
+This Windows 11 build **does not have** an `NPU` counter set:
 
 ```powershell
 (Get-Counter -ListSet * | Where-Object {$_.CounterSetName -match 'NPU|GPU'}).CounterSetName
@@ -103,18 +104,18 @@ Windows 11 build ini **tidak punya** counter set `NPU`:
 # GPU Process Memory / GPU Non Local Adapter Memory
 ```
 
-NPU muncul sebagai adapter di `\GPU Engine(*)`. Pemetaan hasil
+The NPU shows up as an adapter under `\GPU Engine(*)`. Mapping produced by
 `work/luid_attribution.py`:
 
-| LUID | Perangkat | Bukti |
+| LUID | Device | Evidence |
 |---|---|---|
-| `0x00000000_0x00011cf3` | Intel(R) AI Boost (NPU) | beban NPU → engtype `compute` max 102.75 % |
-| `0x00000000_0x00010480` | Intel(R) Graphics (iGPU) | beban GPU.0 → engtype `compute` max 100.07 % |
-| `0x00000000_0x0001099d` | NVIDIA RTX 5060 (dGPU) | hanya engine idle 0 % |
+| `0x00000000_0x00011cf3` | Intel(R) AI Boost (NPU) | NPU load → engtype `compute` max 102.75 % |
+| `0x00000000_0x00010480` | Intel(R) Graphics (iGPU) | GPU.0 load → engtype `compute` max 100.07 % |
+| `0x00000000_0x0001099d` | NVIDIA RTX 5060 (dGPU) | idle engines only, 0 % |
 
-Beban device `CPU` → **nol** instance GPU-Engine untuk pid tersebut.
+A `CPU` device load → **zero** GPU-Engine instances for that pid.
 
-PnP ID untuk konfirmasi:
+PnP IDs for confirmation:
 
 ```
 Intel(R) AI Boost                  PCI\VEN_8086&DEV_AD1D
@@ -122,9 +123,9 @@ Intel(R) Graphics                  PCI\VEN_8086&DEV_7D67
 NVIDIA GeForce RTX 5060 Laptop GPU PCI\VEN_10DE&DEV_2D59
 ```
 
-## Jebakan pengukuran
+## Measurement pitfall
 
-Meng-compile model ke `GPU.0` dalam proses yang sama membuat proses itu memegang
-konteks GPU sampai mati — counter GPU-Engine untuk pid tersebut jadi tidak bisa
-dipakai sebagai bukti "tidak menyentuh GPU". Jalankan pembuktian counter di
-proses terpisah: `python prove_npu.py --npu-only`.
+Compiling a model to `GPU.0` inside the same process makes that process hold a
+GPU context until it exits — the GPU-Engine counters for that pid then cannot be
+used as evidence of "never touched the GPU". Run the counter proof in a separate
+process: `python prove_npu.py --npu-only`.

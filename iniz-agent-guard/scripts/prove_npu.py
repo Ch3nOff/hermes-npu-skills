@@ -1,18 +1,18 @@
 """
-prove_npu.py — bukti keras bahwa inferensi berjalan di NPU, bukan diam-diam
-fallback ke CPU.
+prove_npu.py — hard evidence that inference really runs on the NPU and does not
+silently fall back to the CPU.
 
-Tiga lapis bukti:
-  1. compiled_model.get_property("EXECUTION_DEVICES") — laporan runtime OpenVINO
-     tentang device yang BENAR-BENAR mengeksekusi graph.
-  2. Beban NPU vs CPU vs GPU: menjalankan N inferensi sambil mencuplik counter
-     Windows GPU Engine Utilization Percentage dan Processor(_Total).
-     NPU tidak punya counter set tersendiri di Windows build ini (sudah
-     diverifikasi: Get-Counter -ListSet hanya punya GPU*) — NPU justru muncul
-     sebagai adapter di dalam GPU Engine. Karena itu LUID harus dipetakan dulu
-     lewat luid_attribution.py.
-  3. Perbandingan throughput NPU vs CPU explicit — kalau NPU diam-diam CPU,
-     latensinya akan identik dengan device="CPU".
+Three layers of proof:
+  1. compiled_model.get_property("EXECUTION_DEVICES") — the OpenVINO runtime's own
+     report of the device that ACTUALLY executes the graph.
+  2. NPU vs CPU vs GPU load: run N inferences while sampling the Windows
+     GPU Engine Utilization Percentage and Processor(_Total) counters.
+     The NPU has no counter set of its own in this Windows build (verified:
+     Get-Counter -ListSet only has GPU*) — the NPU instead shows up as an adapter
+     inside GPU Engine. That is why the LUID must first be mapped via
+     luid_attribution.py.
+  3. Explicit NPU vs CPU throughput comparison — if the NPU were secretly the CPU,
+     its latency would be identical to device="CPU".
 """
 
 import json
@@ -89,10 +89,10 @@ def main():
 
     results = []
     if not npu_only:
-        print("=== LAPIS 1+3: EXECUTION_DEVICES + throughput per device ===")
+        print("=== LAYER 1+3: EXECUTION_DEVICES + throughput per device ===")
         for dev in ["NPU", "CPU", "GPU.0"]:
             if dev not in core.available_devices:
-                print(f"  {dev}: tidak tersedia")
+                print(f"  {dev}: not available")
                 continue
             try:
                 r = bench(core, model, dev, ids, mask)
@@ -102,11 +102,11 @@ def main():
             except Exception as e:
                 print(f"  {dev:6s} FAILED: {type(e).__name__}: {e}")
                 results.append({"device": dev, "error": f"{type(e).__name__}: {e}"})
-        print("\nCATATAN: fase di atas MENG-COMPILE model di GPU.0 juga, sehingga "
-              "proses ini memegang konteks GPU. Untuk lapis 2 yang bersih jalankan "
-              "ulang dengan --npu-only.")
+        print("\nNOTE: the phase above ALSO COMPILES the model on GPU.0, so this "
+              "process holds a GPU context. For a clean layer 2, re-run with "
+              "--npu-only.")
 
-    print("\n=== LAPIS 2: counter Windows selama beban NPU ===")
+    print("\n=== LAYER 2: Windows counters during NPU load ===")
     csv_path = Path(tempfile.gettempdir()) / ("npu_proof_counters_npuonly.csv"
                                               if npu_only else "npu_proof_counters.csv")
     dur = 14
@@ -124,7 +124,7 @@ def main():
     while time.time() < t_end:
         req.infer({"input_ids": ids, "attention_mask": mask})
         n_load += 1
-    print(f"  menjalankan {n_load} inferensi NPU selama ~{dur-3}s")
+    print(f"  ran {n_load} NPU inferences over ~{dur-3}s")
     t.join(timeout=20)
 
     own_report = None
@@ -144,7 +144,7 @@ def main():
                     cpus.append(float(p[3]))
                 except ValueError:
                     pass
-        print("  instance GPU-engine teratas selama beban:")
+        print("  top GPU-engine instances during the load:")
         for k, v in inst.most_common(8):
             mx = max(util[k]) if util[k] else 0
             print(f"    {v:>4d}x  max_util={mx:>6.2f}%  {k}")
@@ -154,14 +154,14 @@ def main():
         own = [k for k in inst if f"pid_{pid}" in k]
         own_report = own
         if own:
-            print(f"  GPU-engine instance milik pid ini ({pid}):")
+            print(f"  GPU-engine instances owned by this pid ({pid}):")
             for k in own:
                 print(f"    max_util={max(util[k]):.2f}%  {k}")
         else:
-            print(f"  GPU-engine instance milik pid ini ({pid}): TIDAK ADA "
-                  f"-> proses tidak memakai GPU sama sekali")
+            print(f"  GPU-engine instances owned by this pid ({pid}): NONE "
+                  f"-> the process does not use the GPU at all")
     else:
-        print("  counter CSV tidak terbentuk")
+        print("  counter CSV was not created")
 
     out = {"npu_only_mode": npu_only, "execution_device_report": results,
            "counters_csv": str(csv_path), "npu_inferences_under_load": n_load,

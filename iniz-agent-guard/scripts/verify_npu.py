@@ -1,11 +1,12 @@
 """
-verify_npu.py — bukti bahwa IR hasil export benar-benar compile & jalan di NPU,
-plus perbandingan numerik terhadap referensi PyTorch dan pengukuran latensi nyata.
+verify_npu.py — proof that the exported IR really compiles and runs on the NPU,
+plus a numerical comparison against the PyTorch reference and real latency
+measurements.
 
-Menguji tiap device yang tersedia (NPU, CPU, GPU.0) dan melaporkan:
+Tests every available device (NPU, CPU, GPU.0) and reports:
   * compile time
-  * latensi per-request (p50 / p90) atas beban nyata dari dataset
-  * kesesuaian numerik: max abs diff vs PyTorch, dan action agreement
+  * per-request latency (p50 / p90) on a real workload from the dataset
+  * numerical agreement: max abs diff vs PyTorch, and action agreement
 """
 
 import argparse
@@ -58,8 +59,8 @@ def main():
     texts = df["text"].tolist()
     ids, mask = encode(tok, texts, S)
 
-    # --- referensi PyTorch (fp32, sumber kebenaran) ---
-    print("\n[ref] menghitung referensi PyTorch ...", flush=True)
+    # --- PyTorch reference (fp32, source of truth) ---
+    print("\n[ref] computing the PyTorch reference ...", flush=True)
     import torch
     from guard_model import load_checkpoint
     ref_model, _ = load_checkpoint("ckpt/model.safetensors",
@@ -79,7 +80,7 @@ def main():
     for dev in args.devices.split(","):
         dev = dev.strip()
         if dev not in core.available_devices:
-            print(f"\n=== {dev}: TIDAK TERSEDIA, skip ===")
+            print(f"\n=== {dev}: NOT AVAILABLE, skipping ===")
             continue
         print(f"\n=== {dev} ===", flush=True)
         try:

@@ -1,19 +1,19 @@
 """
-03_compare_generation_modes.py — Bandingkan hasil benchmark antar
-GENERATION_MODE (greedy_64, sample_64, greedy_32, sample_32) untuk
-isolasi penyebab latensi 4.8s/request yang ditemukan di run v2.
+03_compare_generation_modes.py — Compare benchmark results across
+GENERATION_MODE settings (greedy_64, sample_64, greedy_32, sample_32) to
+isolate the cause of the 4.8s/request latency observed in run v2.
 
-CARA PAKAI:
-  1. Set GENERATION_MODE = "greedy_64" di npu_server_v3.py, jalankan server.
-  2. Jalankan skrip ini dengan --mode greedy_64 (di terminal lain).
-  3. Ctrl+C server, ganti GENERATION_MODE = "sample_64", jalankan ulang.
-  4. Jalankan skrip ini lagi dengan --mode sample_64.
-  5. Ulangi untuk greedy_32 dan sample_32 jika perlu.
-  6. Jalankan skrip ini SEKALI LAGI tanpa --mode untuk lihat perbandingan
-     semua hasil yang sudah terkumpul.
+HOW TO USE:
+  1. Set GENERATION_MODE = "greedy_64" in npu_server_v3.py, start the server.
+  2. Run this script with --mode greedy_64 (in another terminal).
+  3. Ctrl+C the server, switch to GENERATION_MODE = "sample_64", restart it.
+  4. Run this script again with --mode sample_64.
+  5. Repeat for greedy_32 and sample_32 if needed.
+  6. Run this script ONE MORE TIME without --mode to see the comparison of
+     every result collected so far.
 
-Hasil tiap run disimpan ke results.json (di folder yang sama) supaya
-perbandingan bisa dilakukan lintas sesi, tidak hilang saat terminal ditutup.
+Each run's results are stored in results.json (same folder) so comparisons can
+span sessions and are not lost when the terminal is closed.
 """
 
 import json
@@ -27,9 +27,9 @@ SERVER_URL = "http://127.0.0.1:8008/v1/chat/completions"
 RESULTS_FILE = Path(__file__).parent / "results.json"
 
 TEST_PROMPTS = [
-    "Ringkas dalam satu kalimat: pengguna meminta bantuan membaca file config.",
-    "Klasifikasikan sentimen pesan ini: 'server down lagi, tolong cek'",
-    "Ekstrak nama file dari teks: 'edit provider.py lalu jalankan npu_server.py'",
+    "Summarize in one sentence: the user asks for help reading a config file.",
+    "Classify the sentiment of this message: 'server down again, please check'",
+    "Extract the filenames from this text: 'edit provider.py then run npu_server.py'",
 ]
 
 
@@ -66,13 +66,13 @@ def save_results(results: dict):
 
 def run_mode(mode_label: str):
     print(f"\n{'=' * 60}")
-    print(f"MENJALANKAN BENCHMARK — label run: {mode_label}")
+    print(f"RUNNING BENCHMARK — run label: {mode_label}")
     print(f"{'=' * 60}")
     print(
-        "PENTING: pastikan npu_server_v3.py yang SEDANG JALAN memang "
-        f"di-set ke GENERATION_MODE yang sesuai dengan label '{mode_label}' "
-        "ini. Skrip ini TIDAK bisa mengecek itu otomatis — cek manual log "
-        "server saat start ('GENERATION_MODE aktif: ...')."
+        "IMPORTANT: make sure the npu_server_v3.py instance CURRENTLY RUNNING "
+        f"is actually set to the GENERATION_MODE matching this '{mode_label}' "
+        "label. This script CANNOT check that automatically — inspect the "
+        "server's startup log manually (it prints the active GENERATION_MODE)."
     )
 
     run_results = []
@@ -82,11 +82,11 @@ def run_mode(mode_label: str):
             result = call_server(prompt)
             run_results.append(result)
             print(f"  Wall: {result['wall_time_ms']}ms | tok/s: {result['approx_tok_per_sec']}")
-            print(f"  Config aktual dari server: {result['generation_config']}")
-            print(f"  Kemungkinan habiskan token budget: {result['likely_hit_token_budget']}")
+            print(f"  Server-reported config: {result['generation_config']}")
+            print(f"  Likely hit token budget: {result['likely_hit_token_budget']}")
             print(f"  Output: {result['output'][:100]}")
         except Exception as e:
-            print(f"  GAGAL: {e}")
+            print(f"  FAILED: {e}")
             return
 
     all_results = load_results()
@@ -96,43 +96,43 @@ def run_mode(mode_label: str):
         "avg_wall_time_ms": round(sum(r["wall_time_ms"] for r in run_results) / len(run_results), 2),
     }
     save_results(all_results)
-    print(f"\nHasil disimpan ke {RESULTS_FILE} dengan label '{mode_label}'")
+    print(f"\nResults stored in {RESULTS_FILE} under the label '{mode_label}'")
 
 
 def show_comparison():
     all_results = load_results()
     if not all_results:
-        print("Belum ada hasil tersimpan. Jalankan dengan --mode <label> dulu.")
+        print("No results stored yet. Run with --mode <label> first.")
         return
 
     print(f"\n{'=' * 70}")
-    print("PERBANDINGAN ANTAR MODE")
+    print("COMPARISON ACROSS MODES")
     print(f"{'=' * 70}")
-    print(f"{'Mode':<15} {'Avg wall (ms)':<15} {'Tercatat pada'}")
+    print(f"{'Mode':<15} {'Avg wall (ms)':<15} {'Recorded at'}")
     print("-" * 70)
     for label, data in all_results.items():
         print(f"{label:<15} {data['avg_wall_time_ms']:<15} {data['timestamp']}")
 
     print(
-        "\nCara baca:\n"
-        "- Kalau sample_64 jauh lebih cepat dari greedy_64 -> do_sample=False\n"
-        "  (constraint yang v2 asumsikan wajib) kemungkinan besar penyebab\n"
-        "  utama lambatnya, BUKAN ukuran model atau NPU itu sendiri.\n"
-        "- Kalau greedy_32 jauh lebih cepat dari greedy_64 (mendekati rasio\n"
-        "  1:2) -> model memang menghabiskan hampir seluruh token budget\n"
-        "  tiap kali (dugaan (a) di laporan kamu terkonfirmasi), turunkan\n"
-        "  max_new_tokens permanen untuk tugas auxiliary singkat.\n"
-        "- Kalau SEMUA mode sama-sama lambat (~4-5s, tidak ada yang beda\n"
-        "  signifikan) -> penyebabnya BUKAN di parameter generate, kembali\n"
-        "  ke dugaan (b) throttling daya/thermal — cek Windows Power Mode\n"
-        "  (Best Performance vs Balanced vs Power Saver) saat benchmark."
+        "\nHow to read this:\n"
+        "- If sample_64 is far faster than greedy_64 -> do_sample=False\n"
+        "  (the constraint v2 assumed was required) is most likely the main\n"
+        "  cause of the slowness, NOT the model size or the NPU itself.\n"
+        "- If greedy_32 is far faster than greedy_64 (close to a 1:2 ratio)\n"
+        "  -> the model really does burn almost the entire token budget every\n"
+        "  time (hypothesis (a) in your report is confirmed); permanently\n"
+        "  lower max_new_tokens for short auxiliary tasks.\n"
+        "- If ALL modes are equally slow (~4-5s, no significant difference)\n"
+        "  -> the cause is NOT the generate parameters; go back to hypothesis\n"
+        "  (b), power/thermal throttling — check the Windows Power Mode\n"
+        "  (Best Performance vs Balanced vs Power Saver) during benchmarks."
     )
 
-    # Cek finish_reason di semua run yang tersimpan — kalau field ini
-    # konsisten "length" atau setara (bukan "stop"/"eos"), itu bukti
-    # langsung dugaan (a), bukan lagi tebakan dari rasio tok/s.
+    # Check finish_reason across all stored runs — if this field is
+    # consistently "length" or equivalent (not "stop"/"eos"), that is direct
+    # evidence for hypothesis (a), no longer a guess from the tok/s ratio.
     print(f"\n{'=' * 70}")
-    print("CEK finish_reason (kalau library expose info ini)")
+    print("finish_reason CHECK (if the library exposes this info)")
     print(f"{'=' * 70}")
     any_finish_reason_found = False
     for label, data in all_results.items():
@@ -143,10 +143,11 @@ def show_comparison():
                 print(f"  {label} #{i}: finish_reason={fr}")
     if not any_finish_reason_found:
         print(
-            "  Tidak ada finish_reason yang berhasil ditangkap dari library\n"
-            "  di semua run. Diagnosis harus mengandalkan proxy "
-            "  'likely_hit_token_budget' saja (word count vs max_new_tokens),\n"
-            "  yang kurang presisi dibanding finish_reason asli."
+            "  No finish_reason could be captured from the library in any\n"
+            "  run. The diagnosis has to rely on the "
+            "  'likely_hit_token_budget' proxy alone (word count vs\n"
+            "  max_new_tokens), which is less precise than a real\n"
+            "  finish_reason."
         )
 
 

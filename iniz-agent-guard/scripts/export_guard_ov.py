@@ -1,23 +1,23 @@
 """
-export_guard_ov.py — export GuardModel (checkpoint fine-tuned) ke OpenVINO IR
-untuk dijalankan di Intel NPU.
+export_guard_ov.py — export GuardModel (fine-tuned checkpoint) to OpenVINO IR
+for execution on the Intel NPU.
 
-Kunci desain untuk NPU:
-  * NPU butuh SHAPE STATIS. Export dengan [1, SEQ_LEN] tetap (default 192).
-  * Input right-padded; pooling memakai Gather pada indeks sum(attention_mask)-1
-    yang dihitung DI DALAM graph.
-  * Tiga output: injection (f32 [1]), shell (f32 [1]), action_logits (f32 [1,4]).
-  * LoRA di-merge ke base weight (merge_and_unload) supaya graph tidak memuat
-    cabang lora_A/lora_B terpisah.
+Key design points for the NPU:
+  * The NPU requires a STATIC SHAPE. Export with a fixed [1, SEQ_LEN] (default 192).
+  * Input is right-padded; pooling uses a Gather at index sum(attention_mask)-1
+    computed INSIDE the graph.
+  * Three outputs: injection (f32 [1]), shell (f32 [1]), action_logits (f32 [1,4]).
+  * LoRA is merged into the base weights (merge_and_unload) so the graph does not
+    carry separate lora_A/lora_B branches.
 
-PITFALL PENTING (terverifikasi lewat debug_trace.py di mesin ini):
-  transformers 4.57 + torch 2.9 => `torch.jit.trace` dan `torch.onnx.export`
-  (dynamo=False) SELALU gagal pada Qwen2Model dengan
+IMPORTANT PITFALL (verified via debug_trace.py on this machine):
+  transformers 4.57 + torch 2.9 => `torch.jit.trace` and `torch.onnx.export`
+  (dynamo=False) ALWAYS fail on Qwen2Model with
       RuntimeError: invalid unordered_map<K, T> key
-  yang berasal dari walrus operator di masking_utils
+  which originates from the walrus operator in masking_utils
   (`if (padding_length := kv_length + kv_offset - attention_mask.shape[-1]) > 0`).
-  Jalur yang BERHASIL: `torch.export.export(..., strict=False)` lalu serahkan
-  ExportedProgram ke `ov.convert_model`. Jangan buang waktu di TorchScript.
+  The path that WORKS: `torch.export.export(..., strict=False)`, then hand the
+  ExportedProgram to `ov.convert_model`. Do not waste time on TorchScript.
 
 Output:
   models/iniz-guard-fp16-ov/guard.xml|.bin
@@ -37,12 +37,13 @@ from guard_model import load_checkpoint, ACTIONS
 
 
 class ExportWrapper(nn.Module):
-    """LoRA sudah di-merge, pooling di dalam graph, 3 output tensor."""
+    """LoRA already merged, pooling inside the graph, 3 output tensors."""
 
     def __init__(self, guard):
         super().__init__()
         merged = guard.base.merge_and_unload()
-        # eager attention: sdpa/flash path tidak bisa di-trace maupun di-export bersih
+        # eager attention: the sdpa/flash path can neither be traced nor exported
+        # cleanly
         merged.config._attn_implementation = "eager"
         merged.config.use_cache = False
         self.backbone = merged
@@ -65,9 +66,9 @@ def main():
     ap.add_argument("--ckpt", default="ckpt/model.safetensors")
     ap.add_argument("--pooling", default="last_nonpad")
     ap.add_argument("--seq-len", type=int, default=128,
-                    help="WAJIB sama dengan MAX_LENGTH saat training (128). "
-                         "Nilai lain tidak error, hanya menambah latensi tanpa "
-                         "manfaat kualitas (192 = +40%% latensi, kualitas sama).")
+                    help="MUST match MAX_LENGTH used during training (128). "
+                         "Other values do not error, they only add latency with "
+                         "no quality benefit (192 = +40%% latency, same quality).")
     ap.add_argument("--out-root", default="../models")
     ap.add_argument("--skip-int8", action="store_true")
     args = ap.parse_args()
@@ -99,8 +100,9 @@ def main():
     for i, name in enumerate(["injection", "shell", "action_logits"]):
         ov_model.outputs[i].get_tensor().set_names({name})
 
-    # PITFALL: torch.export menghasilkan dimensi dinamis (?, ?) walaupun example
-    # input-nya statis. NPU MENOLAK shape dinamis -> wajib reshape eksplisit.
+    # PITFALL: torch.export produces dynamic dimensions (?, ?) even though the
+    # example input is static. The NPU REJECTS dynamic shapes -> an explicit
+    # reshape is required.
     ov_model.reshape({0: ov.PartialShape([1, S]), 1: ov.PartialShape([1, S])})
     print("[export] inputs :", [(i.get_any_name(), str(i.get_partial_shape()),
                                  i.get_element_type().get_type_name()) for i in ov_model.inputs])
@@ -130,10 +132,10 @@ def main():
             src = Path("ckpt") / f
             if src.exists():
                 shutil.copy(src, d / f)
-        # PITFALL: checkpoint ditulis oleh transformers 5.5.4 yang menyimpan
-        # extra_special_tokens sebagai LIST. transformers 4.x mengharap DICT dan
-        # gagal dengan: AttributeError: 'list' object has no attribute 'keys'.
-        # Normalisasi di sini supaya tokenizer bisa dimuat lintas versi.
+        # PITFALL: the checkpoint was written by transformers 5.5.4, which stores
+        # extra_special_tokens as a LIST. transformers 4.x expects a DICT and
+        # fails with: AttributeError: 'list' object has no attribute 'keys'.
+        # Normalize it here so the tokenizer loads across versions.
         cfg_path = d / "tokenizer_config.json"
         if cfg_path.exists():
             cfg = json.loads(cfg_path.read_text())

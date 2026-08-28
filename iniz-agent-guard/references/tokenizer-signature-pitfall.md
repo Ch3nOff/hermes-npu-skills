@@ -1,77 +1,79 @@
-# Pitfall: Signature `apply_chat_template` Berbeda Antara `openvino_genai` dan `transformers`
+# Pitfall: The `apply_chat_template` Signature Differs Between `openvino_genai` and `transformers`
 
-Status: file ini direferensikan di `SKILL.md` (bagian Pitfalls) tapi
-sebelumnya belum dibuat — ditulis sekarang berdasarkan bug yang
-benar-benar ditemukan dan diperbaiki selama sesi debugging
-`hermes-npu-provider` (proyek pendahulu `iniz-agent-guard`).
+Status: this file is referenced in `SKILL.md` (Pitfalls section) but had
+not previously been written — it is written now based on a bug that was
+actually found and fixed during the `hermes-npu-provider` debugging
+session (the predecessor of `iniz-agent-guard`).
 
-## Masalah
+## The problem
 
-`transformers.AutoTokenizer.apply_chat_template()` menerima kwarg
-`tokenize=False` untuk mengembalikan string prompt mentah (bukan token
-id) — ini pola yang umum dipakai dan diharapkan banyak orang.
+`transformers.AutoTokenizer.apply_chat_template()` accepts the
+`tokenize=False` kwarg to return the raw prompt string (instead of token
+ids) — this is the common pattern that most people expect.
 
-`openvino_genai`'s tokenizer, meski API-nya secara sengaja dibuat mirip
-`transformers`, **tidak mendukung kwarg `tokenize=`** pada
-`apply_chat_template()`-nya sendiri. Memanggil dengan `tokenize=False`
-pada tokenizer `openvino_genai` melempar `TypeError`.
+`openvino_genai`'s tokenizer, even though its API was intentionally made
+to resemble `transformers`, **does not support the `tokenize=` kwarg**
+on its own `apply_chat_template()`. Calling it with `tokenize=False` on
+an `openvino_genai` tokenizer raises a `TypeError`.
 
-## Kenapa ini berbahaya secara diam-diam
+## Why this is silently dangerous
 
-Kalau kode ditulis dengan pola try/except yang menangkap `TypeError` lalu
-fallback ke formatter prompt manual (mis. menggabungkan `<|role|>` secara
-manual), bug ini **tidak pernah muncul sebagai error yang terlihat** —
-program tetap jalan, tapi diam-diam memakai format prompt yang salah untuk
-model. Ini persis yang terjadi di sesi debugging: log start server bilang
-"Chat template dimuat" (karena deteksi awal berhasil), tapi tiap request
-sebenarnya tetap jatuh ke fallback manual karena `TypeError` di runtime
-tidak pernah ditangkap dan dilaporkan — akibatnya jawaban model untuk
-kasus ekstraksi presisi salah total, dan butuh beberapa putaran
-debugging untuk sadar akar masalahnya bukan di kuantisasi model,
-melainkan di format prompt yang salah sejak awal.
+If the code is written with a try/except pattern that catches
+`TypeError` and then falls back to a manual prompt formatter (e.g.
+concatenating `<|role|>` by hand), this bug **never surfaces as a
+visible error** — the program keeps running, but silently uses the wrong
+prompt format for the model. That is exactly what happened during the
+debugging session: the server startup log said "Chat template loaded"
+(because the initial detection succeeded), but every request actually
+still fell through to the manual fallback because the runtime
+`TypeError` was never caught and reported — as a result the model's
+answers for precision-extraction cases were completely wrong, and it
+took several rounds of debugging to realize the root cause was not model
+quantization but a prompt format that had been wrong from the start.
 
-## Solusi
+## The solution
 
-Coba dua jalur secara eksplisit, dan **cetak/log jalur mana yang
-benar-benar dipakai** — jangan biarkan fallback terjadi diam-diam:
+Try both paths explicitly, and **print/log which path is actually
+used** — never let the fallback happen silently:
 
 ```python
 chat_template_fn = None
 template_source = None
 
-# Jalur 1: tokenizer bawaan openvino_genai (TANPA kwarg tokenize=)
+# Path 1: the built-in openvino_genai tokenizer (WITHOUT the tokenize= kwarg)
 try:
     tok = pipeline.get_tokenizer()
     if hasattr(tok, "apply_chat_template"):
         chat_template_fn = tok.apply_chat_template
-        template_source = "openvino_genai tokenizer (bawaan)"
+        template_source = "openvino_genai tokenizer (built-in)"
 except Exception as e:
-    print(f"Jalur tokenizer bawaan tidak tersedia: {e}")
+    print(f"Built-in tokenizer path unavailable: {e}")
 
-# Jalur 2 (fallback): transformers.AutoTokenizer, YANG memang mendukung
-# tokenize=False, dipakai HANYA untuk menyusun teks prompt — inferensi
-# tetap lewat pipeline openvino_genai di atas.
+# Path 2 (fallback): transformers.AutoTokenizer, which DOES support
+# tokenize=False, used ONLY to build the prompt text — inference still
+# goes through the openvino_genai pipeline above.
 if chat_template_fn is None:
     from transformers import AutoTokenizer
     hf_tok = AutoTokenizer.from_pretrained(MODEL_PATH)
     chat_template_fn = hf_tok.apply_chat_template
     template_source = "transformers AutoTokenizer (fallback)"
 
-print(f"Chat template dimuat via: {template_source}")
+print(f"Chat template loaded via: {template_source}")
 
-# Saat memanggil, coba TANPA tokenize= dulu (cocok openvino_genai),
-# baru WITH tokenize=False sebagai fallback kedua (cocok transformers):
+# When calling, try WITHOUT tokenize= first (matches openvino_genai),
+# then WITH tokenize=False as a second fallback (matches transformers):
 try:
     prompt = chat_template_fn(messages, add_generation_prompt=True)
 except TypeError:
     prompt = chat_template_fn(messages, tokenize=False, add_generation_prompt=True)
 ```
 
-## Cara mendeteksi kalau ini sedang terjadi di deployment Anda
+## How to detect whether this is happening in your deployment
 
-Jangan percaya log start server saja ("chat template dimuat" bisa
-menyesatkan jika deteksi awal berhasil tapi runtime call tetap gagal).
-Tambahkan logging per-request yang mencetak prompt final yang benar-benar
-dikirim ke model — kalau formatnya `<|role|>\ncontent` manual padahal
-seharusnya format ChatML resmi (`<|im_start|>role\ncontent<|im_end|>`),
-itu tanda fallback manual sedang aktif meski log start bilang sebaliknya.
+Do not trust the server startup log alone ("chat template loaded" can be
+misleading if the initial detection succeeds but the runtime call still
+fails). Add per-request logging that prints the final prompt actually
+sent to the model — if the format is the manual `<|role|>\ncontent` when
+it should be the official ChatML format
+(`<|im_start|>role\ncontent<|im_end|>`), that is a sign the manual
+fallback is active even though the startup log says otherwise.

@@ -1,23 +1,23 @@
 """
-guard_labels.py — SATU sumber kebenaran untuk label mapping Iniz Agent Guard.
+guard_labels.py — THE single source of truth for Iniz Agent Guard label mapping.
 
-Mapping ini BUKAN karangan: sudah divalidasi head-to-head terhadap model hasil
-training lewat work/verify_incoming_mapping.py. Model adalah hakimnya.
+This mapping is not guesswork: it was validated head-to-head against the trained
+model via work/verify_incoming_mapping.py. The model is the judge.
 
-Hasil validasi (IR INT8 di NPU, mapping ini vs mapping notebook lama):
+Validation results (INT8 IR on NPU, this mapping vs the old notebook mapping):
 
               validation                test
   accuracy    0.9586  (vs 0.7301)       0.9660  (vs 0.7410)
   macro-F1    0.5727  (vs 0.4191)       0.8176  (vs 0.4264)
   MAE shell   0.0479  (vs 0.0877)       0.0465  (vs 0.0963)
 
-Kenaikan accuracy +0.23 dan macro-F1 +0.39 (test) membuktikan mapping inilah
-yang dipakai saat training checkpoint-2634.
+The +0.23 accuracy gain and +0.39 macro-F1 gain (test) prove this is the mapping
+that was used when training checkpoint-2634.
 
-CATATAN dua kategori yang TIDAK ADA di dataset (dibiarkan agar mapping tetap
-identik dengan yang dipakai saat training, jangan dihapus):
-  - OBFUSCATION: 'context_overflow' tidak eksis di dataset
-  - EXTRACTION : 'prompt_leaking'  tidak eksis (yang ada 'prompt_leak')
+NOTE on two categories that DO NOT EXIST in the dataset (kept so the mapping
+stays identical to the one used during training — do not remove them):
+  - OBFUSCATION: 'context_overflow' does not exist in the dataset
+  - EXTRACTION : 'prompt_leaking'  does not exist (the dataset has 'prompt_leak')
 """
 
 import pandas as pd
@@ -33,8 +33,8 @@ OBFUSCATION_CATEGORIES = {"encoding_obfuscation", "token_smuggling",
                           "indirect_injection", "context_overflow"}
 EXTRACTION_CATEGORIES = {"system_extraction", "prompt_leaking"}
 
-# shell_risk adalah PROXY keyword, bukan label ground-truth — dataset tidak punya
-# contoh shell-injection sungguhan. Nilai: 0.0 benign / 0.6 keyword hit / 0.1 lain.
+# shell_risk is a keyword PROXY, not a ground-truth label — the dataset has no
+# real shell-injection examples. Values: 0.0 benign / 0.6 keyword hit / 0.1 other.
 SHELL_RISK_KEYWORDS = [
     "eval", "exec", "atob", "bash", "shell", "subprocess",
     "os.system", "js_eval", "code_execution", "command", "__import__",
@@ -51,7 +51,7 @@ def compute_shell_risk_proxy(row) -> float:
 
 
 def map_labels(row) -> pd.Series:
-    """category/severity/label -> (inj, shell, action). Mapping tervalidasi."""
+    """category/severity/label -> (inj, shell, action). Validated mapping."""
     category = row["category"]
     severity = row["severity"]
     label = int(row["label"])

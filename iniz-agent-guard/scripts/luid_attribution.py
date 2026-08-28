@@ -1,11 +1,11 @@
 """
-luid_attribution.py — memastikan LUID mana pada counter GPU Engine yang
-merupakan NPU dan mana yang iGPU/dGPU.
+luid_attribution.py — determine which LUID in the GPU Engine counters is the
+NPU and which are the iGPU/dGPU.
 
-Windows melaporkan NPU (MCDM adapter) DI DALAM counter set 'GPU Engine', jadi
-melihat 'ada aktivitas GPU Engine' saja TIDAK membuktikan apa-apa. Percobaan ini
-menjalankan beban di satu device saja per proses, lalu mencatat LUID + engtype
-yang muncul untuk pid tersebut. Dengan begitu setiap LUID bisa diberi label.
+Windows reports the NPU (MCDM adapter) INSIDE the 'GPU Engine' counter set, so
+merely seeing 'there is GPU Engine activity' proves NOTHING. This experiment
+runs a workload on exactly one device per process, then records the LUID +
+engtype that shows up for that pid. That way every LUID can be labeled.
 
 Usage:
   python luid_attribution.py NPU
@@ -73,11 +73,11 @@ def main():
     while time.time() < end:
         req.infer({"input_ids": ids, "attention_mask": mask})
         n += 1
-    print(f"{n} inferensi dijalankan di {device}")
+    print(f"{n} inferences run on {device}")
     t.join(timeout=20)
 
     if not csv.exists():
-        print("CSV tidak terbentuk")
+        print("CSV was not created")
         return 1
     util = collections.defaultdict(list)
     for line in csv.read_text(encoding="utf-8-sig").splitlines()[1:]:
@@ -87,9 +87,9 @@ def main():
                 util[p[1]].append(float(p[2]))
             except ValueError:
                 pass
-    print(f"\ninstance GPU-Engine untuk pid {pid} selama beban {device}:")
+    print(f"\nGPU-Engine instances for pid {pid} during the {device} workload:")
     if not util:
-        print("  (tidak ada instance sama sekali)")
+        print("  (no instances at all)")
     rows = []
     for k, v in sorted(util.items(), key=lambda kv: -max(kv[1])):
         luid = k.split("_luid_")[1].split("_phys")[0] if "_luid_" in k else "?"

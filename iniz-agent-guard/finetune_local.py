@@ -1,50 +1,55 @@
 """
 finetune_local.py — Iniz Agent Guard, local fine-tuning entry point.
 
-PERBAIKAN dari versi sebelumnya:
-  1. TOKEN HUGGINGFACE HARDCODED DIHAPUS. Token sebelumnya di file ini
-     sudah TERKIRIM keluar dari mesin lokal dan HARUS dianggap bocor —
-     revoke di https://huggingface.co/settings/tokens sebelum
-     melanjutkan apa pun dengan skrip ini. Token sekarang dibaca dari
-     environment variable, tidak pernah ditulis langsung ke source.
-  2. Arsitektur diganti dari AutoModelForCausalLM + generative LoRA
-     fine-tuning menjadi AutoModel (base) + 3 custom head (injection
-     regression, shell regression, action classification) — supaya
-     KONSISTEN dengan apa yang benar-benar diserve guard_server.py.
-     Versi sebelumnya melatih model generatif biasa yang formatnya
-     tidak cocok dengan cara guard_server.py memanggil dan mem-parsing
-     output model.
-  3. Skema dataset diperbaiki. Field 'target'/'input' yang dipakai
-     versi sebelumnya TIDAK ADA di neuralchemy/Prompt-injection-dataset
-     — skema aslinya adalah category/severity/label/text/tags (sudah
-     diverifikasi langsung ke dataset card). Mapping label memakai
-     kategori yang benar-benar ada, bukan agent_manipulation/
-     code_execution/instruction_override yang tidak eksis.
-  4. Semua perbaikan dari sesi debugging notebook sebelumnya
-     diikutsertakan: CUDA_VISIBLE_DEVICES sebelum import torch,
-     hidden_states[-1] alih-alih last_hidden_state (karena AutoModel
-     base MEMANG punya last_hidden_state secara sah — beda dari
-     AutoModelForCausalLM yang tidak), device eksplisit sebelum
-     forward pass, batch size kecil dengan gradient accumulation.
+FIXES relative to the previous version:
+  1. THE HARDCODED HUGGINGFACE TOKEN WAS REMOVED. The token that used to
+     live in this file has already LEFT the local machine and MUST be
+     treated as leaked — revoke it at
+     https://huggingface.co/settings/tokens before doing anything else
+     with this script. The token is now read from an environment
+     variable and is never written directly into the source.
+  2. The architecture was switched from AutoModelForCausalLM + generative
+     LoRA fine-tuning to AutoModel (base) + 3 custom heads (injection
+     regression, shell regression, action classification) — so that it
+     is CONSISTENT with what guard_server.py actually serves. The
+     previous version trained a plain generative model whose format did
+     not match how guard_server.py calls the model and parses its
+     output.
+  3. The dataset schema was corrected. The 'target'/'input' fields used
+     by the previous version DO NOT EXIST in
+     neuralchemy/Prompt-injection-dataset — the real schema is
+     category/severity/label/text/tags (verified directly against the
+     dataset card). The label mapping now uses categories that actually
+     exist, not the non-existent agent_manipulation/code_execution/
+     instruction_override ones.
+  4. Every fix from the earlier notebook debugging session is carried
+     over: CUDA_VISIBLE_DEVICES before importing torch,
+     hidden_states[-1] instead of last_hidden_state (because the
+     AutoModel base DOES legitimately have last_hidden_state — unlike
+     AutoModelForCausalLM, which does not), an explicit device before
+     the forward pass, and a small batch size with gradient
+     accumulation.
 
-STATUS: skrip ini BELUM dijalankan end-to-end di sesi ini. Struktur
-label-mapping dan arsitektur head sudah divalidasi terpisah (lihat
-notebooks/05_finetune_guard_model.ipynb versi terbaru, bukan versi
-lama yang masih ada di paket lama — lihat catatan di SKILL.md).
-Jalankan dan laporkan traceback apa pun yang muncul; jangan asumsikan
-ini otomatis bebas bug hanya karena sudah melalui sesi debugging lain.
+STATUS: this script has NOT been run end-to-end in this session. The
+label-mapping structure and the head architecture were validated
+separately (see the latest version of
+notebooks/05_finetune_guard_model.ipynb, not the old version still
+present in the old package — see the notes in SKILL.md). Run it and
+report any traceback that appears; do not assume it is automatically
+bug-free just because it went through a different debugging session.
 
-Prasyarat sebelum menjalankan:
-    export HF_TOKEN="hf_xxxxx"   # token BARU, setelah yang lama direvoke
+Prerequisites before running:
+    export HF_TOKEN="hf_xxxxx"   # a NEW token, after the old one is revoked
     pip install transformers datasets peft accelerate optimum[openvino] nncf --break-system-packages
 """
 
 # ============================================================
-# 0. LIMIT KE SATU GPU — HARUS sebelum import torch.
-# Trainer HuggingFace otomatis membungkus model dengan DataParallel
-# begitu >1 GPU terlihat, walau tidak diminta eksplisit di
-# TrainingArguments — ini yang menyebabkan OOM di sesi debugging
-# sebelumnya meski model 0.5B secara matematis butuh <2GB.
+# 0. LIMIT TO A SINGLE GPU — MUST come before importing torch.
+# The HuggingFace Trainer automatically wraps the model in DataParallel
+# as soon as it sees >1 GPU, even when that was not requested
+# explicitly in TrainingArguments — this is what caused the OOM in the
+# previous debugging session even though a 0.5B model mathematically
+# needs <2GB.
 # ============================================================
 import os
 
@@ -52,18 +57,18 @@ os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 # ============================================================
-# 1. TOKEN — dibaca dari environment, TIDAK PERNAH hardcoded.
+# 1. TOKEN — read from the environment, NEVER hardcoded.
 # ============================================================
 HF_TOKEN = os.environ.get("HF_TOKEN")
 if not HF_TOKEN:
     raise RuntimeError(
-        "HF_TOKEN tidak ditemukan di environment. Set dulu:\n"
+        "HF_TOKEN not found in the environment. Set it first:\n"
         "  export HF_TOKEN='hf_xxxxx'  (Linux/Mac)\n"
         "  $env:HF_TOKEN='hf_xxxxx'    (PowerShell)\n"
-        "Gunakan token BARU — jika ini terkait token lama yang pernah\n"
-        "tertulis langsung di source file ini, token itu sudah harus\n"
-        "direvoke di https://huggingface.co/settings/tokens sebelum\n"
-        "token baru dibuat."
+        "Use a NEW token — if this relates to the old token that was once\n"
+        "written directly into this source file, that token must already\n"
+        "have been revoked at https://huggingface.co/settings/tokens\n"
+        "before the new one was created."
     )
 
 import gc
@@ -76,23 +81,24 @@ from transformers import AutoTokenizer, AutoModel, Trainer, TrainingArguments
 from peft import LoraConfig, get_peft_model
 
 # ============================================================
-# 2. KONFIGURASI
+# 2. CONFIGURATION
 # ============================================================
 BASE_MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
 MAX_LENGTH = 128
 OUTPUT_DIR_ADAPTER = "./iniz-guard-lora"
 OUTPUT_DIR_MERGED = "./iniz-guard-merged"
 OUTPUT_DIR_OV = "./models/iniz-guard-int8-ov"
-HUB_REPO_ID = "CH3NDev/iniz-agent-guard-int8"  # sesuaikan jika berbeda
+HUB_REPO_ID = "CH3NDev/iniz-agent-guard-int8"  # adjust if different
 
 ACTIONS = ["PASS", "PAUSE_AGENTS", "ISOLATE_FILE", "USER_CONFIRMATION"]
 ACTION2IDX = {a: i for i, a in enumerate(ACTIONS)}
 
 # ============================================================
-# 3. LABEL MAPPING — skema kategori ASLI dataset, sudah diverifikasi
-# langsung ke dataset card neuralchemy/Prompt-injection-dataset.
-# Kategori agent_manipulation/code_execution/instruction_override di
-# versi sebelumnya TIDAK ADA di dataset ini — jangan dipakai lagi.
+# 3. LABEL MAPPING — the dataset's ORIGINAL category schema, verified
+# directly against the neuralchemy/Prompt-injection-dataset dataset card.
+# The agent_manipulation/code_execution/instruction_override categories
+# from the previous version DO NOT EXIST in this dataset — do not use
+# them again.
 # ============================================================
 SEVERITY_MAP = {"low": 0.3, "medium": 0.5, "high": 0.7, "critical": 0.9}
 
@@ -108,10 +114,10 @@ SHELL_RISK_KEYWORDS = [
 
 def compute_shell_risk_proxy(row) -> float:
     """
-    Heuristik kasar, BUKAN label asli — dataset ini tidak punya contoh
-    command-execution/shell-injection sungguhan. Baca hasil evaluasi
-    head shell_risk dengan skeptisisme lebih besar dibanding head
-    injection dan action.
+    A crude heuristic, NOT a real label — this dataset contains no genuine
+    command-execution/shell-injection examples. Read the shell_risk head's
+    evaluation results with more skepticism than the injection and action
+    heads.
     """
     if int(row["label"]) == 0:
         return 0.0
@@ -181,9 +187,9 @@ def guard_collator(batch):
 
 
 # ============================================================
-# 5. MODEL 3-HEAD — AutoModel (base), BUKAN AutoModelForCausalLM.
-# last_hidden_state VALID di sini karena AutoModel base memang
-# mengembalikan BaseModelOutputWithPast, bukan CausalLMOutputWithPast.
+# 5. 3-HEAD MODEL — AutoModel (base), NOT AutoModelForCausalLM.
+# last_hidden_state IS VALID here because the AutoModel base really does
+# return BaseModelOutputWithPast, not CausalLMOutputWithPast.
 # ============================================================
 class GuardHeadModel(torch.nn.Module):
     def __init__(self, base, actions_dim, dtype):
@@ -209,9 +215,9 @@ class GuardHeadModel(torch.nn.Module):
         outputs = self.base(input_ids=input_ids, attention_mask=attention_mask)
         hidden_states = outputs.last_hidden_state
 
-        # Ambil token valid TERAKHIR (bukan [:, -1, :] mentah), karena
-        # padding="max_length" bisa membuat posisi terakhir adalah
-        # padding token, bukan token konten sesungguhnya.
+        # Take the LAST valid token (not a raw [:, -1, :]), because
+        # padding="max_length" can make the final position a padding
+        # token rather than an actual content token.
         last_idx = attention_mask.sum(dim=1) - 1
         batch_idx = torch.arange(hidden_states.size(0), device=hidden_states.device)
         pooled = hidden_states[batch_idx, last_idx]
@@ -260,7 +266,7 @@ def main():
     dtype = torch.bfloat16 if (torch.cuda.is_available() and torch.cuda.is_bf16_supported()) else torch.float32
     print(f"\nModel dtype: {dtype}")
 
-    print("\nLoading backbone (AutoModel, base — bukan ForCausalLM)...")
+    print("\nLoading backbone (AutoModel, base — not ForCausalLM)...")
     backbone = AutoModel.from_pretrained(BASE_MODEL, torch_dtype=dtype, token=HF_TOKEN)
     if hasattr(backbone.config, "use_cache"):
         backbone.config.use_cache = False
@@ -318,21 +324,21 @@ def main():
 
     print("\nMerging LoRA into base and exporting to OpenVINO INT8...")
     print(
-        "CATATAN: langkah merge + export OpenVINO BELUM diotomasi di\n"
-        "fungsi ini secara eksplisit untuk 3-head model — head kustom\n"
-        "(inj_head/shell_head/action_head) TIDAK ikut dalam format save\n"
-        "PEFT/OpenVINO standar. Dokumentasikan cara memuat kembali ketiga\n"
-        "head ini sebelum upload ke Hub, atau restrukturisasi menjadi\n"
-        "custom PEFT head yang PEFT-aware, supaya orang yang download\n"
-        "model dari Hub benar-benar dapat model utuh, bukan cuma backbone."
+        "NOTE: the merge + OpenVINO export step is NOT yet automated in\n"
+        "this function explicitly for the 3-head model — the custom heads\n"
+        "(inj_head/shell_head/action_head) are NOT included in the standard\n"
+        "PEFT/OpenVINO save format. Document how to reload these three\n"
+        "heads before uploading to the Hub, or restructure them into a\n"
+        "PEFT-aware custom head, so that whoever downloads the model from\n"
+        "the Hub really gets the complete model and not just the backbone."
     )
 
     gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
-    print("\nDONE (training + save adapter). Upload ke Hub dilakukan manual")
-    print("setelah verifikasi head kustom bisa dimuat ulang dengan benar.")
+    print("\nDONE (training + adapter saved). The Hub upload is done manually")
+    print("after verifying that the custom heads can be reloaded correctly.")
 
 
 if __name__ == "__main__":

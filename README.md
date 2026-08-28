@@ -246,7 +246,7 @@ Kalau kamu memakai **profile**, resolusikan dari `$HERMES_HOME`
 
 ```bash
 mkdir -p ~/.hermes/skills/local-ai
-git clone https://github.com/CH3NDev/hermes-npu-skills.git \
+git clone https://github.com/Ch3nOff/hermes-npu-skills.git \
   ~/.hermes/skills/local-ai/hermes-npu-skills
 ```
 
@@ -254,7 +254,7 @@ git clone https://github.com/CH3NDev/hermes-npu-skills.git \
 
 ```bash
 mkdir -p "$LOCALAPPDATA/hermes/skills/local-ai"
-git clone https://github.com/CH3NDev/hermes-npu-skills.git \
+git clone https://github.com/Ch3nOff/hermes-npu-skills.git \
   "$LOCALAPPDATA/hermes/skills/local-ai/hermes-npu-skills"
 ```
 
@@ -356,3 +356,12 @@ terminal(command="INIZ_GUARD_DEVICE=NPU python <skill>/iniz-agent-guard/guard_se
 
 Detail setiap pitfall ada di `iniz-agent-guard/SKILL.md` — 13 jebakan, semuanya
 ditemukan lewat kegagalan nyata.
+
+---
+
+## Lisensi
+
+MIT — lihat [`LICENSE`](./LICENSE).
+
+Bobot model di HuggingFace berlisensi **Apache-2.0**, mengikuti base model
+[Qwen2.5-0.5B-Instruct](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct).

@@ -1,0 +1,16 @@
+{
+  "device_requested": "NPU",
+  "pid": 17652,
+  "transcriptions": 93,
+  "npu_active": true,
+  "igpu_active": false,
+  "cpu_mean_pct": 7.5,
+  "cpu_max_pct": 10.6,
+  "instances": {
+    "pid_17652_luid_0x00000000_0x00011cf3_phys_0_eng_0_engtype_compute": {
+      "max": 93.79,
+      "mean": 89.065,
+      "n": 4
+    }
+  }
+}

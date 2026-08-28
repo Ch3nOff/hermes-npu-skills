@@ -7,7 +7,8 @@ packaged as skills/plugins for
 The motivation is simple: the NPU in Intel Core Ultra laptops mostly sits idle because
 mainstream AI tooling defaults to CPU/GPU. This project puts it to work on the
 workloads it actually suits — small, frequently called, latency-sensitive — starting
-with a **security guard** as the first use case.
+with a **security guard** as the first use case, plus **offline speech-to-text** as the
+second.
 
 **Model weights:** [`CH3NDev/iniz-agent-guard-int8`](https://huggingface.co/CH3NDev/iniz-agent-guard-int8)
 on HuggingFace (ready-to-use OpenVINO IR INT8, 495 MB + 3-head checkpoint, 992 MB).
@@ -17,8 +18,8 @@ Not committed here because it exceeds practical Git limits — see
 > **How to read this README.** Every claim is tagged ✅ **Proven** (working code +
 > measured numbers + result files you can inspect) or 🧭 **Planned** (a sensible
 > direction with **not a single line of code written yet**). Every ✅ number has a
-> backing JSON file in `iniz-agent-guard/results/`. Do not treat the 🧭 section as
-> features — it is a roadmap.
+> backing JSON file in `iniz-agent-guard/results/` or `iniz-stt/results/`. Do not treat
+> the 🧭 section as features — it is a roadmap.
 
 Reference hardware for all numbers below: **Intel Core Ultra 9 275HX** (Arrow Lake-HX)
 + Intel AI Boost NPU, Windows 11, OpenVINO 2026.3.
@@ -100,6 +101,66 @@ Evidence: `results/eval_final_seq128.json`, `results/npu_verify_int8.json`,
 
 ---
 
+## ✅ Iniz STT — offline speech-to-text on the NPU
+
+`whisper-base` exported to OpenVINO IR INT8 (81 MB) and served on the NPU through
+`openvino_genai.WhisperPipeline`. Fully offline — audio never leaves the machine.
+
+### Measured results
+
+8 LibriSpeech clips, 86.34 s of audio, ground-truth transcripts, WER on normalized
+text:
+
+| Device | compile | p50 latency | p90 | RTF (median) | WER | CPU load |
+|---|---|---|---|---|---|---|
+| **NPU** | 0.66 s | 169.9 ms | 232.5 ms | 0.0196 | **0.0900** | **7.5 % mean / 10.6 % max** |
+| **CPU** | 0.58 s | 167.8 ms | 207.7 ms | 0.0189 | **0.0900** | 27.0 % mean / 49.2 % max |
+
+RTF ≈ 0.02 means both run about **50× faster than real time**. Transcripts are
+**8/8 identical** between devices.
+
+### The honest headline: NPU is not faster here
+
+For `whisper-base`, the NPU and CPU are within 1 % on latency and identical on
+accuracy. **The reason to use the NPU is CPU offload, not speed** — 7.5 % versus
+27.0 % mean CPU while transcribing. If you only care about wall-clock time at this
+model size, CPU is fine.
+
+### Proof of NPU execution
+
+`WhisperPipeline` does not expose `EXECUTION_DEVICES` (it wraps encoder + decoder),
+and two near-identical latency columns are exactly what a silent fallback looks like.
+So device attribution was proven with per-pid GPU-Engine counters instead:
+
+| Requested | NPU adapter `0x00000000_0x00011cf3` | iGPU | CPU `_Total` | Verdict |
+|---|---|---|---|---|
+| `NPU` | **active, max 93.79 %, mean 89.06 %** | idle | 7.5 % | genuinely NPU |
+| `CPU` | idle | idle | 27.0 % / 49.2 % max | genuinely CPU |
+
+93 transcriptions in ~13 s on the NPU. Evidence in
+`iniz-stt/results/whisper_proof_{NPU,CPU}.json`.
+
+### Server
+
+`iniz-stt/stt_server.py` — `POST /transcribe` (raw audio bytes or JSON `{"path":…}`),
+`GET /health`. Over HTTP on the NPU: compile 1.01 s, warmup 151.2 ms, p50 167.5 ms
+across 11 requests. Smoke test passes with WER 0.0900 and all five error cases
+returning 4xx.
+
+### Honest limitations
+
+- **No non-English audio tested.** `task=translate` runs without crashing but its
+  quality is **unvalidated**. The `taiwan-mandarin-stt` prior experience cited in the
+  old roadmap **does not exist on this machine** — this was built from scratch.
+- **Only `whisper-base`.** `small` / `large-v3` untested; the NPU-vs-CPU verdict may
+  change at larger sizes.
+- **`GPU.0` never benchmarked** — the iGPU column is absent, not zero.
+- **No long-form audio** (longest clip 29.4 s) and **no streaming**.
+- The server binds to `127.0.0.1` **without authentication**. Audio is sensitive
+  input — do not expose on `0.0.0.0` without adding auth.
+
+---
+
 ## ✅ Foundation: the NPU model-serving pattern
 
 A reusable pattern for other NPU workloads: a persistent HTTP server process
@@ -137,17 +198,8 @@ Expensive export pitfalls, all documented with real tracebacks in
 
 ## 🧭 Roadmap
 
-Nothing in this section is implemented yet.
-
-### Offline speech-to-text & translation
-
-Relatively low technical risk: OpenVINO GenAI ships an official `WhisperPipeline`,
-Intel has an Audacity plugin that does exactly this on the NPU, and there is direct
-prior experience from the `taiwan-mandarin-stt` project (Whisper large-v3 via
-OpenVINO, same laptop). The pattern is: swap the pipeline inside the existing server
-structure.
-
-*Starting point:* `iniz-agent-guard/guard_server.py` as the server skeleton.
+Nothing in this section is implemented yet. (Offline speech-to-text **moved out** of
+this section — it is implemented and measured above.)
 
 ### Summarization & content generation as an auxiliary model
 
@@ -191,11 +243,20 @@ iniz-agent-guard/
 └── notebooks/
     ├── 01_train_guard.ipynb            # 3-head training (produces checkpoint-2634)
     └── 02_verify_export_deploy.ipynb   # Verify → export IR → NPU proof → deploy
+
+iniz-stt/
+├── SKILL.md                  # Full skill: NPU-vs-CPU verdict, 6 pitfalls
+├── stt_server.py             # NPU HTTP server (WhisperPipeline)
+├── scripts/                  # export/fetch audio, probe, bench, NPU proof, client
+└── results/                  # whisper_bench.json, whisper_proof_{NPU,CPU}.json
 ```
 
-**Model weights are not included** (IR INT8 = 495 MB, beyond practical Git limits).
-Get them from [HuggingFace](https://huggingface.co/CH3NDev/iniz-agent-guard-int8) or
-generate them yourself with `scripts/export_guard_ov.py --seq-len 128`.
+**Model weights are not included** (guard IR INT8 = 495 MB, beyond practical Git
+limits). Get them from
+[HuggingFace](https://huggingface.co/CH3NDev/iniz-agent-guard-int8) or generate them
+yourself with `scripts/export_guard_ov.py --seq-len 128`. The STT IR is not shipped
+either — regenerate it in ~3 minutes with
+`optimum-cli export openvino --model openai/whisper-base --weight-format int8 models/whisper-base-int8-ov`.
 
 ## Requirements
 
@@ -220,6 +281,18 @@ generate them yourself with `scripts/export_guard_ov.py --seq-len 128`.
 
 Read `iniz-agent-guard/SKILL.md` before changing anything — all 13 pitfalls in there
 were found through real failures, not speculation.
+
+For offline speech-to-text:
+
+1. Export the IR (~3 min):
+   `optimum-cli export openvino --model openai/whisper-base --weight-format int8 models/whisper-base-int8-ov`
+2. Fetch test audio with ground truth: `python iniz-stt/scripts/fetch_audio.py`
+3. Prove NPU execution: `python iniz-stt/scripts/prove_whisper_npu.py NPU`
+4. Start the server: `INIZ_STT_DEVICE=NPU python iniz-stt/stt_server.py`
+5. Test it: `python iniz-stt/scripts/stt_client.py`
+
+Read `iniz-stt/SKILL.md` first — it opens with a **negative result** (the NPU is not
+faster than CPU for `whisper-base`) that changes how you should deploy it.
 
 ---
 

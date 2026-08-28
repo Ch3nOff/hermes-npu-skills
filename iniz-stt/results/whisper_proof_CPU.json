@@ -1,0 +1,10 @@
+{
+  "device_requested": "CPU",
+  "pid": 28708,
+  "transcriptions": 87,
+  "npu_active": false,
+  "igpu_active": false,
+  "cpu_mean_pct": 27.0,
+  "cpu_max_pct": 49.2,
+  "instances": {}
+}

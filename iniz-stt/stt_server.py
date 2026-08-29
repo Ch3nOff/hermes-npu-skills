@@ -11,12 +11,18 @@ over to this file; that rule was about a discriminative checkpoint with no lm_he
 
 API:
   GET  /health
-    -> status, device, model, compile_s, warmup_ms, requests_served, latency_p50_ms
+    -> status, device, model, script_mode, compile_s, warmup_ms, requests_served,
+       latency_p50_ms
   POST /transcribe
     body: raw audio bytes (wav/flac/ogg — anything soundfile can read)
           or JSON {"path": "/abs/path.wav", "language": "<|en|>", "task": "transcribe"}
     query: ?language=<|en|>&task=translate&timestamps=1
     -> {"text", "language", "duration_s", "rtf", "_ms", "_device", "_model", "chunks"?}
+
+Set INIZ_STT_SCRIPT=trad to force Chinese output to Traditional (opencc s2twp).
+Whisper emits MIXED orthography for zh-TW audio and has no token to control it, so
+this post-processing step is the only way to guarantee Traditional. The response then
+carries _script_mode, _script_converted, and _text_raw when a conversion happened.
 
 Security: binds to 127.0.0.1 with NO authentication. Do NOT expose on 0.0.0.0
 without adding auth — audio is sensitive input.
@@ -42,6 +48,33 @@ DEVICE = os.environ.get("INIZ_STT_DEVICE", "NPU")
 PORT = int(os.environ.get("INIZ_STT_PORT", "8010"))
 TARGET_SR = 16000
 MAX_UPLOAD = int(os.environ.get("INIZ_STT_MAX_BYTES", str(64 * 1024 * 1024)))
+# 'trad' converts Chinese output to Traditional via opencc s2twp; 'off' leaves it
+# alone. Whisper emits MIXED orthography for zh-TW audio, so this is the only way
+# to guarantee Traditional output — the model has no token for it.
+SCRIPT_MODE = os.environ.get("INIZ_STT_SCRIPT", "off").lower()
+
+
+def convert_script(text: str) -> tuple:
+    """Return (converted_text, changed_bool). No-op unless SCRIPT_MODE == 'trad'.
+
+    Uses CHARACTER-level opencc s2t, not phrase-level s2twp. s2twp rewrites text that
+    is already Traditional: measured case 說明了 -> 說明瞭, which turned a perfect
+    whisper-medium transcription into an error. Char-level s2t is idempotent on
+    Traditional input, which matters because Whisper output is MIXED.
+    """
+    if SCRIPT_MODE != "trad" or not text:
+        return text, False
+    try:
+        from opencc import OpenCC
+    except ImportError:
+        return text, False
+    cc = OpenCC("s2t")
+    out = []
+    for ch in text:
+        conv = cc.convert(ch)
+        out.append(conv if len(conv) == 1 else ch)
+    result = "".join(out)
+    return result, result != text
 
 
 def decode_audio(raw: bytes):
@@ -112,14 +145,21 @@ class Engine:
         if len(self.latencies) > 500:
             self.latencies = self.latencies[-500:]
 
+        raw_text = str(res).strip()
+        text, converted = convert_script(raw_text)
         out = {
-            "text": str(res).strip(),
+            "text": text,
             "duration_s": round(duration_s, 3),
             "rtf": round((ms / 1000) / duration_s, 4) if duration_s else None,
             "_ms": round(ms, 1),
             "_device": self.device,
             "_model": self.model_dir.name,
         }
+        if SCRIPT_MODE == "trad":
+            out["_script_mode"] = "trad"
+            out["_script_converted"] = converted
+            if converted:
+                out["_text_raw"] = raw_text
         # language / chunks are only present on some builds — never assume
         lang = getattr(res, "language", None)
         if lang:
@@ -129,7 +169,7 @@ class Engine:
             out["chunks"] = [
                 {"start": getattr(c, "start_ts", None),
                  "end": getattr(c, "end_ts", None),
-                 "text": str(getattr(c, "text", "")).strip()}
+                 "text": convert_script(str(getattr(c, "text", "")).strip())[0]}
                 for c in chunks
             ]
         return out
@@ -154,6 +194,7 @@ class STTHandler(BaseHTTPRequestHandler):
         lat = e.latencies
         self._json(200, {
             "status": "ok", "device": e.device, "model": e.model_dir.name,
+            "script_mode": SCRIPT_MODE,
             "model_dir": str(e.model_dir), "sample_rate": TARGET_SR,
             "compile_s": round(e.compile_s, 2), "warmup_ms": round(e.warmup_ms, 1),
             "requests_served": len(lat),
@@ -225,7 +266,7 @@ def main():
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), STTHandler)
     print(f"[stt] listening on http://127.0.0.1:{PORT}  "
           f"(POST /transcribe, GET /health)")
-    print(f"[stt] device={DEVICE} model={MODEL_DIR}")
+    print(f"[stt] device={DEVICE} model={MODEL_DIR} script={SCRIPT_MODE}")
     print("[stt] SECURITY NOTICE: binds to 127.0.0.1 with NO authentication. "
           "Do NOT expose on 0.0.0.0 without adding auth — audio is sensitive input.")
     try:

@@ -1,0 +1,37 @@
+[
+  {
+    "device": "CPU",
+    "compile_ok": true,
+    "compile_s": 2.4,
+    "language": "<|zh|>",
+    "clips": 10,
+    "latency_p50_ms": 2136.1,
+    "latency_p90_ms": 2256.7,
+    "rtf_median": 0.5587,
+    "cer_raw": 0.2703,
+    "cer_raw_errors": 20,
+    "cer_raw_chars": 74,
+    "cer_trad": 0.0811,
+    "cer_trad_errors": 6,
+    "cer_trad_chars": 74,
+    "hyp_script": {
+      "simp": 8,
+      "trad": 2,
+      "chars": 75,
+      "verdict": "SIMPLIFIED"
+    },
+    "audio_seconds_total": 39.68,
+    "transcripts": [
+      "在家也可以刷卡。",
+      "外交与全球性议题",
+      "我们的人口结构急速老化",
+      "新店端",
+      "則正確的說明了星球的大小",
+      "开源服务",
+      "松峰橋",
+      "土地楞阳安利",
+      "雖然我沒有辦法",
+      "华顿三学院最受欢迎的谈判课"
+    ]
+  }
+]

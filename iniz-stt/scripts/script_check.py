@@ -55,10 +55,22 @@ def script_verdict(texts):
 
 
 def to_traditional(text):
-    """Convert Simplified -> Traditional via opencc (s2twp: Taiwan phrases)."""
+    """Convert Simplified -> Traditional, character by character.
+
+    Deliberately NOT opencc's phrase-level s2twp: that rewrites text that is ALREADY
+    Traditional. Measured failure: 說明了 -> 說明瞭 ("了" misread as "瞭" by the
+    phrase table), which added a fresh error to a clip whisper-medium had transcribed
+    perfectly. Character-level s2t is idempotent — converting Traditional input
+    returns it unchanged — so it can be applied to mixed output safely.
+    """
     try:
         from opencc import OpenCC
-        return OpenCC("s2twp").convert(text)
+        cc = OpenCC("s2t")
+        out = []
+        for ch in text:
+            conv = cc.convert(ch)
+            out.append(conv if len(conv) == 1 else ch)
+        return "".join(out)
     except Exception:
         # fall back to the char table so scoring still works without opencc
         table = {a: b for a, b in PAIRS}

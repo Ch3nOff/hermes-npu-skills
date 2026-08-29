@@ -19,7 +19,7 @@ API:
     query: ?language=<|en|>&task=translate&timestamps=1
     -> {"text", "language", "duration_s", "rtf", "_ms", "_device", "_model", "chunks"?}
 
-Set INIZ_STT_SCRIPT=trad to force Chinese output to Traditional (opencc s2twp).
+Set INIZ_STT_SCRIPT=trad to force Chinese output to Traditional (opencc, char-level).
 Whisper emits MIXED orthography for zh-TW audio and has no token to control it, so
 this post-processing step is the only way to guarantee Traditional. The response then
 carries _script_mode, _script_converted, and _text_raw when a conversion happened.
@@ -48,7 +48,7 @@ DEVICE = os.environ.get("INIZ_STT_DEVICE", "NPU")
 PORT = int(os.environ.get("INIZ_STT_PORT", "8010"))
 TARGET_SR = 16000
 MAX_UPLOAD = int(os.environ.get("INIZ_STT_MAX_BYTES", str(64 * 1024 * 1024)))
-# 'trad' converts Chinese output to Traditional via opencc s2twp; 'off' leaves it
+# 'trad' converts Chinese output to Traditional via char-level opencc; 'off' leaves it
 # alone. Whisper emits MIXED orthography for zh-TW audio, so this is the only way
 # to guarantee Traditional output — the model has no token for it.
 SCRIPT_MODE = os.environ.get("INIZ_STT_SCRIPT", "off").lower()

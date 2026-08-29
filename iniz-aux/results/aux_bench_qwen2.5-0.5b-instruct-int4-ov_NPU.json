@@ -1,0 +1,400 @@
+{
+  "model": "qwen2.5-0.5b-instruct-int4-ov",
+  "device": "NPU",
+  "compile_ok": true,
+  "compile_s": 9.4,
+  "summarize": {
+    "n": 12,
+    "rouge1": 0.3155,
+    "rouge2": 0.1041,
+    "rougeL": 0.2425,
+    "p50_ms": 3384.5,
+    "rows": [
+      {
+        "id": "cnn_00",
+        "rouge1": 0.4,
+        "rouge2": 0.1282,
+        "rougeL": 0.25,
+        "ms": 3624.5,
+        "output": "A dog with a friendly white-and-black mix named Theia, who was found dead after being hit by a car, survived by being found alive in a neighbor's yard and receiving medical treatment from the Humane Society."
+      },
+      {
+        "id": "cnn_01",
+        "rouge1": 0.4238,
+        "rouge2": 0.1879,
+        "rougeL": 0.3046,
+        "ms": 8759.1,
+        "output": "Five Americans who were monitored for three weeks at an Omaha, Nebraska, hospital after being exposed to Ebola in West Africa have been released, a Nebraska Medicine spokesman said in an email Wednesday. One of the five had a heart-related issue on Saturday and has been discharged but hasn't left the area. They were exposed to Ebola in Sierra Leone in March but none developed the deadly virus. They are clinicians for Partners in Health, a Boston-based aid group. They all had contact with a colleague who was diagnosed with the disease and is being treated at the National Institutes of Health in Bethesda, Maryland. As of"
+      },
+      {
+        "id": "cnn_02",
+        "rouge1": 0.4,
+        "rouge2": 0.1587,
+        "rougeL": 0.3077,
+        "ms": 2434.3,
+        "output": "A Duke student has admitted to hanging a noose made of rope from a tree near a student union, university officials said Thursday."
+      },
+      {
+        "id": "cnn_03",
+        "rouge1": 0.1429,
+        "rouge2": 0.05,
+        "rougeL": 0.0952,
+        "ms": 1982.5,
+        "output": "Trey and Ellie are both high school seniors who are planning to attend proms and pursue different interests."
+      },
+      {
+        "id": "cnn_04",
+        "rouge1": 0.1928,
+        "rouge2": 0.0247,
+        "rougeL": 0.1205,
+        "ms": 4099.1,
+        "output": "A man named Andrew Getty, who was a grandson of the famous oil tycoon J. Paul Getty, died of natural causes. His family, including his grandfather and great-grandfather, have been in the news for his wealth and controversial family history."
+      },
+      {
+        "id": "cnn_05",
+        "rouge1": 0.2979,
+        "rouge2": 0.0444,
+        "rougeL": 0.1277,
+        "ms": 2330.5,
+        "output": "The Philippine government is advising residents to be prepared for flash floods and landslides due to the approaching tropical storm Maysak."
+      },
+      {
+        "id": "cnn_06",
+        "rouge1": 0.5263,
+        "rouge2": 0.3333,
+        "rougeL": 0.5263,
+        "ms": 2590.4,
+        "output": "Bob Barker, who hosted \"The Price Is Right\" for 35 years, stepped down as the show's host in 2007."
+      },
+      {
+        "id": "cnn_07",
+        "rouge1": 0.274,
+        "rouge2": 0.0563,
+        "rougeL": 0.2466,
+        "ms": 3599.9,
+        "output": "A 19-year-old man from UK was arrested in Britain after returning from Turkey and charged with engaging in conduct in preparation of acts of terrorism and engaging in conduct with the intention of assisting others to commit acts of terrorism."
+      },
+      {
+        "id": "cnn_08",
+        "rouge1": 0.3019,
+        "rouge2": 0.1176,
+        "rougeL": 0.2642,
+        "ms": 3418.1,
+        "output": "Paul Walker, the actor who died in 2013, was remembered by fans with a special tribute in the film \"Furious 7\" and by other tributes on social media."
+      },
+      {
+        "id": "cnn_09",
+        "rouge1": 0.3548,
+        "rouge2": 0.0667,
+        "rougeL": 0.2903,
+        "ms": 3350.8,
+        "output": "The Anne Frank House researchers concluded that Anne Frank and Margot Frank probably did not survive to March 1945, contradicting the date of death which had previously been determined by Dutch authorities."
+      },
+      {
+        "id": "cnn_10",
+        "rouge1": 0.186,
+        "rouge2": 0.0488,
+        "rougeL": 0.186,
+        "ms": 3072.4,
+        "output": "In the early days of the Gulf War, a patriotic America saluted the performance of a controversial version of \"The Star-Spangled Banner\" by comedian Roseanne Barr."
+      },
+      {
+        "id": "cnn_11",
+        "rouge1": 0.2857,
+        "rouge2": 0.0328,
+        "rougeL": 0.1905,
+        "ms": 3437.6,
+        "output": "In a Facebook post, Republican and former representative Michele Bachmann criticized President Obama for his handling of the Iran nuclear deal, accusing him of being \"condescending\" and \"laughing at her.\""
+      }
+    ]
+  },
+  "sentiment": {
+    "n": 40,
+    "accuracy": 0.9,
+    "correct": 36,
+    "unparsed": 0,
+    "p50_ms": 648.1,
+    "rows": [
+      {
+        "id": "sst2_00",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 630.1,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_01",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 614.2,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_02",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 620.0,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_03",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 614.6,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_04",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 613.5,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_05",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 619.1,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_06",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 643.5,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_07",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 761.5,
+        "output": "Negative."
+      },
+      {
+        "id": "sst2_08",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 675.5,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_09",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 656.6,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_10",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 651.5,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_11",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 652.0,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_12",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 666.4,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_13",
+        "gold": "positive",
+        "pred": "negative",
+        "ms": 687.7,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_14",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 672.1,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_15",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 661.9,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_16",
+        "gold": "positive",
+        "pred": "negative",
+        "ms": 622.0,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_17",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 651.6,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_18",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 616.1,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_19",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 621.9,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_20",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 621.7,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_21",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 622.5,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_22",
+        "gold": "negative",
+        "pred": "positive",
+        "ms": 620.7,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_23",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 643.3,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_24",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 653.3,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_25",
+        "gold": "negative",
+        "pred": "positive",
+        "ms": 621.8,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_26",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 680.3,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_27",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 691.7,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_28",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 687.9,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_29",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 674.6,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_30",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 632.1,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_31",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 639.7,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_32",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 651.0,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_33",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 682.5,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_34",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 673.1,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_35",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 654.7,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_36",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 648.1,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_37",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 634.5,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_38",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 648.1,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_39",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 626.1,
+        "output": "positive"
+      }
+    ]
+  }
+}

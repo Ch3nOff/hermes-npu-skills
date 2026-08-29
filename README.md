@@ -7,8 +7,9 @@ packaged as skills/plugins for
 The motivation is simple: the NPU in Intel Core Ultra laptops mostly sits idle because
 mainstream AI tooling defaults to CPU/GPU. This project puts it to work on the
 workloads it actually suits — small, frequently called, latency-sensitive — starting
-with a **security guard** as the first use case, plus **offline speech-to-text** as the
-second.
+with a **security guard** as the first use case, plus **offline speech-to-text** and a
+**small auxiliary LLM** after it. One of those three turned out to be a poor fit for the
+NPU, and that result is reported as prominently as the wins.
 
 **Model weights:** [`CH3NDev/iniz-agent-guard-int8`](https://huggingface.co/CH3NDev/iniz-agent-guard-int8)
 on HuggingFace (ready-to-use OpenVINO IR INT8, 495 MB + 3-head checkpoint, 992 MB).
@@ -18,8 +19,8 @@ Not committed here because it exceeds practical Git limits — see
 > **How to read this README.** Every claim is tagged ✅ **Proven** (working code +
 > measured numbers + result files you can inspect) or 🧭 **Planned** (a sensible
 > direction with **not a single line of code written yet**). Every ✅ number has a
-> backing JSON file in `iniz-agent-guard/results/` or `iniz-stt/results/`. Do not treat
-> the 🧭 section as features — it is a roadmap.
+> backing JSON file in `iniz-agent-guard/results/`, `iniz-stt/results/`, or
+> `iniz-aux/results/`. Do not treat the 🧭 section as features — it is a roadmap.
 
 Reference hardware for all numbers below: **Intel Core Ultra 9 275HX** (Arrow Lake-HX)
 + Intel AI Boost NPU, Windows 11, OpenVINO 2026.3.
@@ -219,6 +220,89 @@ returning 4xx.
 
 ---
 
+## ✅ Iniz Aux — small generative model for cheap, frequent work
+
+Qwen2.5-0.5B-Instruct (INT4 327 MB / INT8 494 MB) for summaries, sentiment, and field
+extraction. Measured against ground truth, not eyeballed.
+
+### The NPU is the wrong device for this, by 20×
+
+| Task | NPU p50 | CPU p50 | NPU penalty |
+|---|---|---|---|
+| summarize (120 tok) | 14181.6 ms | **704.9 ms** | **20.1× slower** |
+| sentiment (8 tok) | 1029.8 ms | **43.8 ms** | **23.5× slower** |
+| extract (40 tok) | 2726.3 ms | **119.4 ms** | **22.8× slower** |
+
+Accuracy is identical across devices (ROUGE-1 0.3179 NPU / 0.3218 CPU; sentiment
+0.9250 both). The NPU **is** executing it — adapter at **98.37 % mean**, proven with
+LUID counters — it is just bad at autoregressive decode, where each token is a separate
+graph execution and a static-shape accelerator has nothing to amortize.
+
+`aux_server.py` defaults to **CPU**. Use `INIZ_AUX_DEVICE=NPU` only to keep cores free
+(CPU 4.5 % vs 22.5 % during load), never for latency.
+
+This is the opposite of the Whisper result above, and both are real: a fixed-shape
+encoder pass suits the NPU; 60+ tiny sequential decode steps do not.
+
+### The earlier "precision extraction fails" warning does not reproduce
+
+The old roadmap warned that INT4 hallucinated and INT8 refused. Re-tested on 10 items
+with exact known answers:
+
+| Model | Device | exact | refusal | hallucination | wrong span |
+|---|---|---|---|---|---|
+| INT8 | NPU | **7/10** | **0** | **0** | 3 |
+| INT4 | NPU | 6/10 | **0** | **0** | 4 |
+| INT8 | CPU | 6/10 | **0** | **0** | 4 |
+
+**Zero refusals and zero hallucinations in 30 attempts.** Every failure was a wrong
+*span* — a real substring, just not the requested one: `torch==2.9.1` instead of
+`2.9.1`, `prod-media-eu-west-1/thumbnails/` with the `s3://` dropped. That is a
+boundary-selection problem, fixable with a regex filter, not fabrication. The stale
+warning would have killed a task that works ~65 % of the time and fails safely.
+
+### Measured quality
+
+12 CNN/DailyMail articles vs human highlights, 40 balanced SST-2 sentences, greedy
+decoding:
+
+| Model | Device | ROUGE-1 | ROUGE-2 | ROUGE-L | Sentiment | Extract |
+|---|---|---|---|---|---|---|
+| INT8 | NPU | 0.3179 | 0.1299 | 0.2321 | **0.9250** | 7/10 |
+| INT4 | NPU | 0.3155 | 0.1041 | 0.2425 | 0.9000 | 6/10 |
+| INT8 | CPU | 0.3218 | 0.1336 | 0.2404 | **0.9250** | 6/10 |
+
+**Sentiment is the one to actually deploy:** 0.9250 accuracy, 0 unparsed outputs across
+40 items, 43.8 ms on CPU. INT4 is 4.2× faster than INT8 on NPU for ~equal ROUGE-1, but
+ROUGE-2 drops 20 % — phrasing drifts further.
+
+### ROUGE hides a real failure mode
+
+`cnn_10` (ROUGE-1 0.089) produced fluent output that moved *Roseanne Barr's* booing and
+President Bush's "disgraceful" quote onto *Vince Neil*. Every entity is real and
+present in the article, so substring grounding checks pass. Extrinsic-entity audit:
+INT8 3/66 entities absent from source (4.5 %), INT4 0/47 (0.0 %) — but INT4 cites 29 %
+fewer entities, so that 0 % is partly terseness, not fidelity.
+
+**Misattribution is not measured** — it needs NLI or a human. Treat 0.5B summaries as
+drafts.
+
+### Honest limitations
+
+- **Summarization is mediocre** (ROUGE-1 0.32 vs 0.40+ reference-grade) and
+  inconsistent (per-item 0.089–0.531).
+- **Misattribution rate unknown**; one confirmed case in 12 is a floor, not a rate.
+- **Extraction ~65 % exact**, no post-filter or retry implemented.
+- **Only 12 summarization items** — wide error bars.
+- **No long-context test** (articles capped at 3500 chars), so "context compression"
+  remains unproven.
+- **`GPU.0` never benchmarked**; **INT4 on CPU never benchmarked**.
+- **No batching** — requests serialize under a lock.
+- The server binds to `127.0.0.1` **without authentication**; free-text input to a
+  generative model should not be exposed without auth.
+
+---
+
 ## ✅ Foundation: the NPU model-serving pattern
 
 A reusable pattern for other NPU workloads: a persistent HTTP server process
@@ -256,20 +340,9 @@ Expensive export pitfalls, all documented with real tracebacks in
 
 ## 🧭 Roadmap
 
-Nothing in this section is implemented yet. (Offline speech-to-text **moved out** of
-this section — it is implemented and measured above.)
-
-### Summarization & content generation as an auxiliary model
-
-The NPU handling small, frequent workloads (captioning, page summaries, context
-compression) that currently ride on an expensive model — **not** a replacement for the
-main reasoning model.
-
-*Honest limitation from an earlier session:* **precision extraction** tasks (pull a
-filename out of free text) failed consistently at both quantizations — INT4
-hallucinated, INT8 refused to answer. Summarization and sentiment were far more
-stable. Do not assume "document summarization" works automatically just because it
-looks similar; verify it again.
+Nothing in this section is implemented yet. (Offline speech-to-text and the auxiliary
+summarization model **moved out** of this section — both are implemented and measured
+above.)
 
 ### Power optimization
 
@@ -309,6 +382,12 @@ iniz-stt/
 │                             #   + zh: script_check, fetch_audio_zhtw, bench_zhtw,
 │                             #         test_prompt_fair, stt_client_zhtw
 └── results/                  # whisper_bench{,_zhtw*}.json + LUID proofs + prompt test
+
+iniz-aux/
+├── SKILL.md                  # Full skill: CPU-beats-NPU verdict, 8 pitfalls
+├── aux_server.py             # HTTP server (LLMPipeline, CPU default by measurement)
+├── scripts/                  # fetch data, bench, grounding audit, NPU proof, client
+└── results/                  # aux_bench_*, aux_*_grounding, aux_proof_* JSON
 ```
 
 **Model weights are not included** (guard IR INT8 = 495 MB, beyond practical Git
@@ -366,6 +445,19 @@ python iniz-stt/scripts/stt_client_zhtw.py
 
 `iniz-stt/scripts/script_check.py` measures whether any Chinese text is Simplified or
 Traditional — run it on a dataset before trusting its card.
+
+For the auxiliary model (summaries / sentiment / extraction):
+
+```bash
+python iniz-aux/scripts/fetch_aux_data.py          # CNN/DailyMail + SST-2 + extraction
+python iniz-aux/scripts/bench_aux.py --model ../models/qwen2.5-0.5b-instruct-int8-ov --device CPU
+python iniz-aux/scripts/prove_aux_npu.py NPU       # confirms NPU runs it, just slowly
+INIZ_AUX_DEVICE=CPU python iniz-aux/aux_server.py
+python iniz-aux/scripts/aux_client.py
+```
+
+Read `iniz-aux/SKILL.md` before switching that server to the NPU — it is 20× slower
+there for the same accuracy.
 
 Read `iniz-stt/SKILL.md` first — it opens with a **negative result** (the NPU is not
 faster than CPU for `whisper-base`) that changes how you should deploy it.

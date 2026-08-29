@@ -1,0 +1,11 @@
+{
+  "device_requested": "CPU",
+  "model": "qwen2.5-0.5b-instruct-int8-ov",
+  "pid": 2864,
+  "generations": 41,
+  "npu_active": false,
+  "igpu_active": false,
+  "cpu_mean_pct": 22.5,
+  "cpu_max_pct": 35.6,
+  "instances": {}
+}

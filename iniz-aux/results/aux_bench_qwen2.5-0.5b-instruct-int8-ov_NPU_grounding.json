@@ -1,0 +1,25 @@
+{
+  "model": "qwen2.5-0.5b-instruct-int8-ov",
+  "device": "NPU",
+  "summaries": 12,
+  "entities_total": 66,
+  "extrinsic_total": 3,
+  "extrinsic_rate": 0.0455,
+  "summaries_with_extrinsic": 2,
+  "flagged": [
+    {
+      "id": "cnn_03",
+      "extrinsic": [
+        "Trey Moses'"
+      ]
+    },
+    {
+      "id": "cnn_10",
+      "extrinsic": [
+        "President Bush",
+        "Vince Neil's"
+      ]
+    }
+  ],
+  "not_measured": "misattribution of in-article entities (needs NLI/human)"
+}

@@ -1,0 +1,11 @@
+{
+  "model": "qwen2.5-0.5b-instruct-int4-ov",
+  "device": "NPU",
+  "summaries": 12,
+  "entities_total": 47,
+  "extrinsic_total": 0,
+  "extrinsic_rate": 0.0,
+  "summaries_with_extrinsic": 0,
+  "flagged": [],
+  "not_measured": "misattribution of in-article entities (needs NLI/human)"
+}

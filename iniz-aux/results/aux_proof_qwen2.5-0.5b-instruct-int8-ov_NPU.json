@@ -1,0 +1,17 @@
+{
+  "device_requested": "NPU",
+  "model": "qwen2.5-0.5b-instruct-int8-ov",
+  "pid": 18784,
+  "generations": 2,
+  "npu_active": true,
+  "igpu_active": false,
+  "cpu_mean_pct": 4.5,
+  "cpu_max_pct": 9.5,
+  "instances": {
+    "pid_18784_luid_0x00000000_0x00011cf3_phys_0_eng_0_engtype_compute": {
+      "max": 98.86,
+      "mean": 98.372,
+      "n": 5
+    }
+  }
+}

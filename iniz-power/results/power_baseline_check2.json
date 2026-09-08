@@ -1,0 +1,32 @@
+{
+  "label": "baseline",
+  "elapsed_s": 30.0,
+  "work_units": 0,
+  "rails": {
+    "rapl_package0_pkg": {
+      "mean_mw": 27513.0,
+      "max_mw": 40407.6,
+      "min_mw": 17139.1,
+      "stdev_mw": 4923.6,
+      "median_mw": 26933.1,
+      "n": 26
+    },
+    "rapl_package0_pp0": {
+      "mean_mw": 17631.2,
+      "max_mw": 30151.4,
+      "min_mw": 8569.1,
+      "stdev_mw": 4638.8,
+      "median_mw": 16854.5,
+      "n": 26
+    },
+    "rapl_package0_pp1": {
+      "mean_mw": 562.1,
+      "max_mw": 1577.3,
+      "min_mw": 75.3,
+      "stdev_mw": 303.3,
+      "median_mw": 512.7,
+      "n": 26
+    }
+  },
+  "pkg_energy_mwh": 229.2783
+}

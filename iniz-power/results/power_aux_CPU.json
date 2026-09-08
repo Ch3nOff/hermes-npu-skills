@@ -1,0 +1,39 @@
+{
+  "label": "aux_CPU",
+  "elapsed_s": 30.45,
+  "work_units": 58,
+  "rails": {
+    "rapl_package0_pkg": {
+      "mean_mw": 73105.3,
+      "max_mw": 82974.7,
+      "min_mw": 27205.1,
+      "stdev_mw": 12090.3,
+      "median_mw": 76132.0,
+      "n": 26
+    },
+    "rapl_package0_pp0": {
+      "mean_mw": 60324.6,
+      "max_mw": 70727.9,
+      "min_mw": 16773.9,
+      "stdev_mw": 11568.8,
+      "median_mw": 62825.8,
+      "n": 26
+    },
+    "rapl_package0_pp1": {
+      "mean_mw": 852.1,
+      "max_mw": 1479.1,
+      "min_mw": 426.5,
+      "stdev_mw": 306.1,
+      "median_mw": 873.8,
+      "n": 26
+    }
+  },
+  "pkg_energy_mwh": 618.2991,
+  "pkg_mwh_per_unit": 10.66033,
+  "baseline_mw": 8077.0,
+  "marginal_mw": 65028.3,
+  "marginal_energy_mwh": 549.9867,
+  "marginal_mwh_per_unit": 9.48253,
+  "device": "CPU",
+  "task": "aux"
+}

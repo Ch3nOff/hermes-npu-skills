@@ -1,0 +1,39 @@
+{
+  "label": "stt_CPU",
+  "elapsed_s": 25.05,
+  "work_units": 134,
+  "rails": {
+    "rapl_package0_pkg": {
+      "mean_mw": 85204.8,
+      "max_mw": 96846.9,
+      "min_mw": 27922.3,
+      "stdev_mw": 17036.4,
+      "median_mw": 91021.3,
+      "n": 22
+    },
+    "rapl_package0_pp0": {
+      "mean_mw": 73971.6,
+      "max_mw": 85661.0,
+      "min_mw": 17708.6,
+      "stdev_mw": 16726.9,
+      "median_mw": 79424.1,
+      "n": 22
+    },
+    "rapl_package0_pp1": {
+      "mean_mw": 635.2,
+      "max_mw": 1069.0,
+      "min_mw": 414.6,
+      "stdev_mw": 215.6,
+      "median_mw": 528.6,
+      "n": 22
+    }
+  },
+  "pkg_energy_mwh": 592.8864,
+  "pkg_mwh_per_unit": 4.42453,
+  "baseline_mw": 8077.0,
+  "marginal_mw": 77127.8,
+  "marginal_energy_mwh": 536.6837,
+  "marginal_mwh_per_unit": 4.0051,
+  "device": "CPU",
+  "task": "stt"
+}

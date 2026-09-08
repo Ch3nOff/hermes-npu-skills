@@ -1,0 +1,39 @@
+{
+  "label": "stt_NPU",
+  "elapsed_s": 25.05,
+  "work_units": 172,
+  "rails": {
+    "rapl_package0_pkg": {
+      "mean_mw": 37370.7,
+      "max_mw": 50366.2,
+      "min_mw": 29300.5,
+      "stdev_mw": 3791.0,
+      "median_mw": 37384.7,
+      "n": 22
+    },
+    "rapl_package0_pp0": {
+      "mean_mw": 21936.9,
+      "max_mw": 34388.1,
+      "min_mw": 17639.7,
+      "stdev_mw": 3176.4,
+      "median_mw": 21465.5,
+      "n": 22
+    },
+    "rapl_package0_pp1": {
+      "mean_mw": 686.4,
+      "max_mw": 1081.8,
+      "min_mw": 451.9,
+      "stdev_mw": 203.4,
+      "median_mw": 666.7,
+      "n": 22
+    }
+  },
+  "pkg_energy_mwh": 260.0056,
+  "pkg_mwh_per_unit": 1.51166,
+  "baseline_mw": 8077.0,
+  "marginal_mw": 29293.7,
+  "marginal_energy_mwh": 203.8101,
+  "marginal_mwh_per_unit": 1.18494,
+  "device": "NPU",
+  "task": "stt"
+}

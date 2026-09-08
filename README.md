@@ -7,9 +7,10 @@ packaged as skills/plugins for
 The motivation is simple: the NPU in Intel Core Ultra laptops mostly sits idle because
 mainstream AI tooling defaults to CPU/GPU. This project puts it to work on the
 workloads it actually suits — small, frequently called, latency-sensitive — starting
-with a **security guard** as the first use case, plus **offline speech-to-text** and a
-**small auxiliary LLM** after it. One of those three turned out to be a poor fit for the
-NPU, and that result is reported as prominently as the wins.
+with a **security guard** as the first use case, plus **offline speech-to-text**, a
+**small auxiliary LLM**, and **real energy measurement** after it. One of those workloads
+turned out to be a poor fit for the NPU, and that result is reported as prominently as
+the wins.
 
 **Model weights:** [`CH3NDev/iniz-agent-guard-int8`](https://huggingface.co/CH3NDev/iniz-agent-guard-int8)
 on HuggingFace (ready-to-use OpenVINO IR INT8, 495 MB + 3-head checkpoint, 992 MB).
@@ -19,8 +20,9 @@ Not committed here because it exceeds practical Git limits — see
 > **How to read this README.** Every claim is tagged ✅ **Proven** (working code +
 > measured numbers + result files you can inspect) or 🧭 **Planned** (a sensible
 > direction with **not a single line of code written yet**). Every ✅ number has a
-> backing JSON file in `iniz-agent-guard/results/`, `iniz-stt/results/`, or
-> `iniz-aux/results/`. Do not treat the 🧭 section as features — it is a roadmap.
+> backing JSON file in `iniz-agent-guard/results/`, `iniz-stt/results/`,
+> `iniz-aux/results/`, or `iniz-power/results/`. Do not treat the 🧭 section as
+> features — it is a roadmap.
 
 Reference hardware for all numbers below: **Intel Core Ultra 9 275HX** (Arrow Lake-HX)
 + Intel AI Boost NPU, Windows 11, OpenVINO 2026.3.
@@ -303,6 +305,40 @@ drafts.
 
 ---
 
+## ✅ Iniz Power — real energy per task, not utilization vibes
+
+Intel RAPL package-power measurement (`\Energy Meter(*)\Power`) while hammering each
+workload in a tight loop, idle subtracted, median-based. Marginal energy per work unit:
+
+| Workload | NPU | CPU | Winner per task |
+|---|---|---|---|
+| guard inference | 0.248 / 0.056 mWh | 2.18 / 1.73 mWh | **NPU, 8.8–30.8× less** |
+| Whisper-base transcription | 1.22 / 0.43 mWh | 4.36 / 3.34 mWh | **NPU, 3.6–7.8× less** |
+| Qwen2.5-0.5B generation (60 tok) | 72.6 / 18.7 mWh | 10.0 / 7.2 mWh | **CPU, 2.6–7.2× less** |
+
+Each pair is quiet-floor / elevated-floor assumption — the idle floor moved 7 W → 27 W
+mid-campaign (cause undetermined, no benchmark process alive), so ratios are ranges.
+No verdict flips between them.
+
+The finding that matters: the NPU draws **less power** on aux (33.6 W vs 76.1 W) but
+takes 19× longer, spending more energy per task. **Watts ≠ energy.** Anyone routing by
+watts or CPU % alone would pick the NPU and drain the battery faster.
+
+Scope, stated plainly: RAPL package only (not wall power; NPU-tile coverage
+unverified, so NPU wins are lower bounds), tight-loop saturation (not sporadic use),
+`power_analysis.json` marks comparisons below baseline drift as UNRESOLVED rather than
+printing them.
+
+### Honest limitations
+
+- **Floor drift is the dominant uncertainty** (±20 W vs signals of 25–95 W). Re-run
+  with the machine left alone and baseline immediately before AND after.
+- **~86 Wh battery translations are illustrative**, not promises (display/radio/dGPU
+  excluded).
+- **Linux not covered** (needs RAPL sysfs path instead of perf counters).
+
+---
+
 ## ✅ Foundation: the NPU model-serving pattern
 
 A reusable pattern for other NPU workloads: a persistent HTTP server process
@@ -340,16 +376,19 @@ Expensive export pitfalls, all documented with real tracebacks in
 
 ## 🧭 Roadmap
 
-Nothing in this section is implemented yet. (Offline speech-to-text and the auxiliary
-summarization model **moved out** of this section — both are implemented and measured
-above.)
+Nothing in this section is implemented yet. (Speech-to-text, the auxiliary model, and
+SoC-package energy measurement **moved out** of this section — all three are
+implemented and measured above.)
 
 ### Power optimization
 
-What **is** proven: the NPU does not load the CPU/GPU while in use (CPU `_Total` mean
-6.3% during an NPU workload). That is far narrower than a claim of "tens of percent
-battery savings" — which has **never been measured** in this project and would need
-separate end-to-end power profiling.
+What **is** now measured: marginal SoC-package energy per task for all three workloads
+(see ✅ Iniz Power above) — guard 8.8–30.8× cheaper on NPU, Whisper 3.6–7.8× cheaper
+on NPU, aux generation 2.6–7.2× cheaper on CPU.
+
+What is **still not measured**: wall power (display, dGPU, losses), and therefore any
+"hours of battery saved" claim. That needs a battery-discharge run or an external
+meter — RAPL package scope cannot produce it.
 
 The "learn usage patterns for automatic power management" part is a much larger leap:
 it needs long-horizon observability, resource allocation policy, and possibly
@@ -388,6 +427,11 @@ iniz-aux/
 ├── aux_server.py             # HTTP server (LLMPipeline, CPU default by measurement)
 ├── scripts/                  # fetch data, bench, grounding audit, NPU proof, client
 └── results/                  # aux_bench_*, aux_*_grounding, aux_proof_* JSON
+
+iniz-power/
+├── SKILL.md                  # Full skill: RAPL method, ranges, 7 pitfalls
+├── scripts/                  # power_probe.py, analyze_power.py
+└── results/                  # power_{guard,stt,aux}_{NPU,CPU}.json + 5 baselines
 ```
 
 **Model weights are not included** (guard IR INT8 = 495 MB, beyond practical Git
@@ -461,6 +505,18 @@ there for the same accuracy.
 
 Read `iniz-stt/SKILL.md` first — it opens with a **negative result** (the NPU is not
 faster than CPU for `whisper-base`) that changes how you should deploy it.
+
+To reproduce the energy numbers (Windows, machine left alone):
+
+```bash
+python iniz-power/scripts/power_probe.py baseline   # idle floor; repeat 2-3x
+python iniz-power/scripts/power_probe.py guard NPU
+python iniz-power/scripts/power_probe.py guard CPU
+python iniz-power/scripts/analyze_power.py          # verdict table
+```
+
+Read `iniz-power/SKILL.md` before quoting any mWh figure — the floor-drift caveat
+changes single numbers into ranges.
 
 ---
 

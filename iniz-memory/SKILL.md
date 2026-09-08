@@ -86,6 +86,23 @@ cross-encoder adds noise, not signal. Not shipped; `scripts/test_rerank.py` (tak
 verdicts are device-independent (same weights), so CPU-only rerank tests settle it
 for the NPU too.
 
+## BM25 hybrid measured, also rejected
+
+`scripts/bench_hybrid.py` (stdlib-only BM25, k1=1.5/b=0.75, RRF k=60 over top-20)
+fused with dense, e5-base, 39 queries:
+
+| Split | dense r@1 → hybrid | dense r@3 → hybrid |
+|---|---|---|
+| overall | 0.590 → 0.615 | **0.846 → 0.769** |
+| EN | 0.650 → 0.600 | 0.850 → 0.850 |
+| ID | 0.526 → 0.632 | **0.842 → 0.684** |
+
+r@1 ticks up (+0.026, fixed 4 / broken 3) but r@3 — what a top-5 server actually
+serves — drops hard, worst on ID (−0.158). Lexical overlap drags lookalike sibling
+sections into the top-3 on a corpus that shares vocabulary everywhere. Not shipped;
+`results/hybrid_test.json` preserves the negative. Third rejected add-on: the
+bi-encoder alone keeps winning.
+
 ---
 
 ## Procedure
@@ -211,8 +228,9 @@ range), all four error cases 4xx, 39/39 requests served, `VERDICT: PASS`.
   lagging again at larger n, not curiosity.
 - **No incremental indexing.** Full re-embed at startup (~3.1 s NPU / ~4.1 s CPU for
   113 chunks; grows linearly). Fine for hundreds of notes, not thousands.
-- **No hybrid search.** Pure dense cosine; BM25 fallback for exact terms (filenames,
-  error codes, hex IDs) is unimplemented.
+- **No hybrid search — tested, hurts.** BM25+RRF fusion drops r@3 0.846 → 0.769
+  (ID −0.158). Pure dense cosine stands; exact-term fallback stays unimplemented
+  pending evidence it helps anywhere.
 - **Chunking is heading-based.** Tables split across part boundaries lose row context;
   unmeasured how much this costs.
 
@@ -237,5 +255,6 @@ bug), and the client prints `VERDICT: PASS`.
 - `results/mem_bench_v2.json` — e5-small on the same 39 queries (the ladder's lower rung)
 - `results/mem_bench.json` — e5-small on the original 26 queries (superseded)
 - `results/rerank_base_CPU.json`, `results/rerank_CPU.json` — both rejected reranker runs
+- `results/hybrid_test.json` — the rejected BM25+RRF run
 - `iniz-agent-guard/SKILL.md` — the reshape/static-shape discipline reused here
 - `iniz-stt/SKILL.md` — where the NPU *does* win at larger sizes

@@ -383,8 +383,9 @@ the bi-encoder cost. Not shipped; both negative results preserved
 - **The Obsidian vault is missing** (`Clevates-m` registered but absent from disk).
   Built on repo docs per explicit user choice; re-point `build_corpus.py` when the
   vault reappears.
-- **No incremental indexing** (full re-embed at startup), **no BM25 hybrid** for
-  exact terms, **heading-based chunking** can split table context.
+- **No incremental indexing** (full re-embed at startup), **no BM25 hybrid** (tested:
+  drops r@3 0.846 → 0.769) for exact terms, **heading-based chunking** can split
+  table context.
 - **`bge-m3` untested** — next trigger would be ID lagging again at larger n.
 
 ---

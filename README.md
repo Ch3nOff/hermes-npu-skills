@@ -8,9 +8,9 @@ The motivation is simple: the NPU in Intel Core Ultra laptops mostly sits idle b
 mainstream AI tooling defaults to CPU/GPU. This project puts it to work on the
 workloads it actually suits — small, frequently called, latency-sensitive — starting
 with a **security guard** as the first use case, plus **offline speech-to-text**, a
-**small auxiliary LLM**, and **real energy measurement** after it. One of those workloads
-turned out to be a poor fit for the NPU, and that result is reported as prominently as
-the wins.
+**small auxiliary LLM**, **real energy measurement**, and **local semantic search**
+after it. Two of those workloads turned out to fit the CPU better than the NPU, and
+those results are reported as prominently as the wins.
 
 **Model weights:** [`CH3NDev/iniz-agent-guard-int8`](https://huggingface.co/CH3NDev/iniz-agent-guard-int8)
 on HuggingFace (ready-to-use OpenVINO IR INT8, 495 MB + 3-head checkpoint, 992 MB).
@@ -21,8 +21,8 @@ Not committed here because it exceeds practical Git limits — see
 > measured numbers + result files you can inspect) or 🧭 **Planned** (a sensible
 > direction with **not a single line of code written yet**). Every ✅ number has a
 > backing JSON file in `iniz-agent-guard/results/`, `iniz-stt/results/`,
-> `iniz-aux/results/`, or `iniz-power/results/`. Do not treat the 🧭 section as
-> features — it is a roadmap.
+> `iniz-aux/results/`, `iniz-power/results/`, or `iniz-memory/results/`. Do not
+> treat the 🧭 section as features — it is a roadmap.
 
 Reference hardware for all numbers below: **Intel Core Ultra 9 275HX** (Arrow Lake-HX)
 + Intel AI Boost NPU, Windows 11, OpenVINO 2026.3.
@@ -339,6 +339,49 @@ printing them.
 
 ---
 
+## ✅ Iniz Memory — local semantic search over these docs
+
+`multilingual-e5-small` INT8 (118 MB) embedded the repo's own 8 markdown files (113
+chunks), ranked by cosine similarity against 26 hand-written queries (20 English + 6
+Indonesian, including cross-lingual ID queries over English chunks):
+
+| Split | n | recall@1 | recall@3 | recall@5 |
+|---|---|---|---|---|
+| overall | 26 | 0.615 | 0.808 | 0.962 |
+| monolingual EN | 20 | 0.650 | 0.900 | 1.000 |
+| cross-lingual ID | 6 | 0.500 | 0.500 | 0.833 |
+
+Same weights both devices (26/26 top-1 agreement), so the device verdict is pure
+latency — and **CPU wins it**: 10.3 ms vs 15.2 ms per query, 9.9 vs 17.8 ms/chunk
+bulk (batch=8 helps CPU, does nothing for NPU). `mem_server.py` defaults to CPU; NPU
+stays an offload option. At this model size the NPU's fixed overhead dominates —
+same shape as the whisper-base verdict, possibly flipping for larger embedding models
+(untested, stated as untested).
+
+The misses are near-misses: every gold chunk for the 5 misses@3 ranks 4–9.
+
+### Reranker measured, then rejected
+
+`mMiniLM` cross-encoder (multilingual, covers Indonesian) over top-10 moved recall@1
+**0.615 → 0.577** — fixed 2, broke 3 previously correct answers — at ~232 ms/query,
+20× the bi-encoder cost. On a corpus of cross-referencing sibling sections it adds
+noise, not signal. Not shipped; the negative result is preserved in
+`results/rerank_CPU.json`.
+
+### Honest limitations
+
+- **26 hand-written queries, same author as the gold labels.** Phrasing bias is
+  unavoidable; the ID split (n=6) is a smoke signal with wide bars.
+- **The Obsidian vault is missing** (`Clevates-m` registered but absent from disk).
+  Built on repo docs per explicit user choice; re-point `build_corpus.py` when the
+  vault reappears.
+- **No incremental indexing** (full re-embed at startup), **no BM25 hybrid** for
+  exact terms, **heading-based chunking** can split table context.
+- **Larger embedding models untested** — the CPU verdict may not hold at `bge-m3`
+  size.
+
+---
+
 ## ✅ Foundation: the NPU model-serving pattern
 
 A reusable pattern for other NPU workloads: a persistent HTTP server process
@@ -432,6 +475,13 @@ iniz-power/
 ├── SKILL.md                  # Full skill: RAPL method, ranges, 7 pitfalls
 ├── scripts/                  # power_probe.py, analyze_power.py
 └── results/                  # power_{guard,stt,aux}_{NPU,CPU}.json + 5 baselines
+
+iniz-memory/
+├── SKILL.md                  # Full skill: recall splits, CPU verdict, 7 pitfalls
+├── mem_server.py             # HTTP server (bi-encoder, CPU default by measurement)
+├── corpus/                   # chunks.json + queries.json (the measured set)
+├── scripts/                  # corpus build, bench, batch check, rerank test, client
+└── results/                  # mem_bench.json + rerank_CPU.json (rejected)
 ```
 
 **Model weights are not included** (guard IR INT8 = 495 MB, beyond practical Git
@@ -517,6 +567,20 @@ python iniz-power/scripts/analyze_power.py          # verdict table
 
 Read `iniz-power/SKILL.md` before quoting any mWh figure — the floor-drift caveat
 changes single numbers into ranges.
+
+For local semantic search over these docs:
+
+```bash
+optimum-cli export openvino --model intfloat/multilingual-e5-small \
+  --task feature-extraction --weight-format int8 models/e5-small-int8-ov
+python iniz-memory/scripts/build_corpus.py       # chunk the docs
+python iniz-memory/scripts/bench_mem.py --devices NPU,CPU
+INIZ_MEM_DEVICE=CPU python iniz-memory/mem_server.py
+python iniz-memory/scripts/mem_client.py
+```
+
+Read `iniz-memory/SKILL.md` before adding a reranker — the measured one made recall
+worse, not better.
 
 ---
 

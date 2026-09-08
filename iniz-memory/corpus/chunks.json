@@ -1,0 +1,680 @@
+[
+ {
+  "id": "c000",
+  "file": "README.md",
+  "heading": "Iniz — NPUNative Local AI Skills for Hermes Agent",
+  "text": "Iniz — NPUNative Local AI Skills for Hermes Agent\nRun small AI models locally on the Intel NPU (Intel(R) AI Boost, via OpenVINO),\npackaged as skills/plugins for\nHermes Agent.\n\nThe motivation is simple: the NPU in Intel Core Ultra laptops mostly sits idle because\nmainstream AI tooling defaults to CPU/GPU. This project puts it to work on the\nworkloads it actually suits — small, frequently called, latencysensitive — starting\nwith a security guard as the first use case, plus offline speechtotext, a\nsmall auxiliary LLM, and real energy measurement after it. One of those workloads\nturned out to be a poor fit for the NPU, and that result is reported as prominently as\nthe wins.\n\nModel weights: CH3NDev/inizagentguardint8\non HuggingFace (readytouse OpenVINO IR INT8, 495 MB + 3head checkpoint, 992 MB).\nNot committed here because it exceeds practical Git limits — see\nGetting Started.\n\n How to read this README. Every claim is tagged ✅ Proven (working code +\n measured numbers + result files you can inspect) or 🧭 Planned (a sensible\n direction with not a single line of code written yet). Every ✅ number has a\n backing JSON file in inizagentguard/results/, inizstt/results/,\n inizaux/results/, or inizpower/results/. Do not treat the 🧭 section as\n features — it is a roadmap.\n\nReference hardware for all numbers below: Intel Core Ultra 9 275HX (Arrow LakeHX)\n+ Intel AI Boost NPU, Windows 11, OpenVINO 2026.3."
+ },
+ {
+  "id": "c001",
+  "file": "README.md",
+  "heading": "✅ Iniz Agent Guard — promptinjection detector on the NPU",
+  "text": "✅ Iniz Agent Guard — promptinjection detector on the NPU\nA discriminative classifier: Qwen2.50.5B + LoRA r=8 with three heads\n(injectionscore, shellriskscore, action over 4 classes), exported to\nOpenVINO IR INT8 and executed on the NPU. It intercepts tool calls / LLM calls to\ndetect prompt injection 100% locally, with no cloud connection."
+ },
+ {
+  "id": "c002",
+  "file": "README.md",
+  "heading": "Measured results",
+  "text": "Measured results\nMetric  validation (941)  test (942) \n\n action accuracy  0.9586  0.9650 \n action macroF1 (classes present)  0.5727  0.8171 \n ROCAUC injection → attack  0.9670  0.9709 \n ROCAUC shell → proxy target  0.9648  0.9731 \n injection MAE  0.0637  0.0651 \n binary gate precision / recall / F1  0.962 / 0.985 / 0.973  0.968 / 0.984 / 0.976 \n\nPerrequest latency on the NPU (batch 1, seqlen=128, INT8): p50 34.4 ms,\np90 34.8 ms. Endtoend server: npums p50 35.4 ms, client roundtrip 52 ms.\n\n Device  EXECUTIONDEVICES  p50 \n\n NPU  NPU  34.4 ms \n CPU  ['CPU']  ~94 ms \n iGPU (GPU.0)  ['GPU.0']  ~105 ms \n\nThe NPU is ~2.7× faster than the CPU for this workload.\n\nEvidence: results/evalfinalseq128.json, results/npuverifyint8.json,\nresults/npuproofnpuonly.json."
+ },
+ {
+  "id": "c003",
+  "file": "README.md",
+  "heading": "Proof of NPU execution (three layers)",
+  "text": "Proof of NPU execution (three layers)\n1. compiled.getproperty(\"EXECUTIONDEVICES\") → NPU\n2. Windows counter LUID attribution. This Windows 11 build has no NPU counter\n   set — the NPU appears as an adapter inside \\GPU Engine(), so \"GPU Engine\n   activity exists\" is not evidence of a fallback. LUIDs were mapped by running a\n   load onedeviceperprocess: NPU = 0x…0x11cf3 (engtype compute, max 102.75%),\n   iGPU = 0x…0x10480, dGPU = 0x…0x1099d. Loading CPU → zero GPUEngine\n   instances for that pid. CPU Total during 228 NPU inferences: mean 6.3%.\n3. INT8 numerical fidelity vs PyTorch fp32: maxΔinj = 0.045,\n   action agreement 1.000 (40 samples)."
+ },
+ {
+  "id": "c004",
+  "file": "README.md",
+  "heading": "Finetuning status: complete and validated",
+  "text": "Finetuning status: complete and validated\ncheckpoint2634 (3 epochs, 2634 steps, final loss 0.0094) is verified:\n\n finetunelocal.py produces 488 statedict keys identical to the checkpoint,\n  and 11/11 hyperparameters match trainingargs.bin\n  → scripts/verifyarchmatch.py\n A 3step training dryrun completed trainer.train() successfully\n  → scripts/dryrunfinetune.py\n The label mapping was validated with the model as judge: the correct mapping\n  gives 0.966 accuracy vs 0.741 for the wrong one (macroF1 0.818 vs 0.426)\n  → scripts/verifyincomingmapping.py, results/mappingverdict.json"
+ },
+ {
+  "id": "c005",
+  "file": "README.md",
+  "heading": "Honest limitations",
+  "text": "Honest limitations\nshellhead optimizes for a proxy target, not real shell danger. ROCAUC\n  against its own target is 0.973 (well trained), but that target is a keyword proxy.\n  Measured: dangerous shell with proxy keywords → score 0.445; equally dangerous\n  shell without those keywords (rm rf /, dd if=, mkfs, fork bomb) → only\n  0.165. That is why the server applies a keyword backstop broader than the training\n  proxy.\n ISOLATEFILE (support 9) and USERCONFIRMATION (support 2) are too rare in the\n  test set to judge reliably.\n ~2% false positives on benign business text (example: \"Summarize this quarterly\n  report in three bullet points\" → injection 0.648).\n Threshold 0.30 comes from a testsplit sweep and is not validated on real traffic.\n The server binds to 127.0.0.1 without authentication. Do not expose it on\n  0.0.0.0 without adding auth."
+ },
+ {
+  "id": "c006",
+  "file": "README.md",
+  "heading": "✅ Iniz STT — offline speechtotext on the NPU",
+  "text": "✅ Iniz STT — offline speechtotext on the NPU\nwhisperbase exported to OpenVINO IR INT8 (81 MB) and served on the NPU through\nopenvinogenai.WhisperPipeline. Fully offline — audio never leaves the machine.\nEnglish uses whisperbase; Traditional Chinese needs whispermedium (748 MB) +\nopencc postprocessing — base is unusable there and largev3 does not run on this\nNPU at all."
+ },
+ {
+  "id": "c007",
+  "file": "README.md",
+  "heading": "Measured results",
+  "text": "Measured results\n8 LibriSpeech clips, 86.34 s of audio, groundtruth transcripts, WER on normalized\ntext (English, whisperbase):\n\n Device  compile  p50 latency  p90  RTF (median)  WER  CPU load \n\n NPU  0.66 s  169.9 ms  232.5 ms  0.0196  0.0900  7.5 % mean / 10.6 % max \n CPU  0.58 s  167.8 ms  207.7 ms  0.0189  0.0900  27.0 % mean / 49.2 % max \n\nRTF ≈ 0.02 means both run about 50× faster than real time. Transcripts are\n8/8 identical between devices."
+ },
+ {
+  "id": "c008",
+  "file": "README.md",
+  "heading": "The honest headline: NPU is not faster here (at base)",
+  "text": "The honest headline: NPU is not faster here (at base)\nFor whisperbase on English, the NPU and CPU are within 1 % on latency and identical\non accuracy. The reason to use the NPU is CPU offload, not speed — 7.5 % versus\n27.0 % mean CPU while transcribing. This flips at whispersmall (see Chinese below),\nwhere the NPU wins by 1.33×."
+ },
+ {
+  "id": "c009",
+  "file": "README.md",
+  "heading": "Proof of NPU execution",
+  "text": "Proof of NPU execution\nWhisperPipeline does not expose EXECUTIONDEVICES (it wraps encoder + decoder),\nand two nearidentical latency columns are exactly what a silent fallback looks like.\nSo device attribution was proven with perpid GPUEngine counters instead:\n\n Requested  NPU adapter 0x000000000x00011cf3  iGPU  CPU Total  Verdict \n\n NPU  active, max 93.79 %, mean 89.06 %  idle  7.5 %  genuinely NPU \n CPU  idle  idle  27.0 % / 49.2 % max  genuinely CPU \n\n93 transcriptions in ~13 s on the NPU. Evidence in\ninizstt/results/whisperproof{NPU,CPU}.json."
+ },
+ {
+  "id": "c010",
+  "file": "README.md",
+  "heading": "Traditional Chinese (Taiwanese Mandarin)",
+  "text": "Traditional Chinese (Taiwanese Mandarin)\n10 Common Voice 16.1 zhTW clips (39.7 s), references verified Traditional\n(simp=0 / trad=11) before use. CER, not WER — Chinese has no word spacing.\n\n Model  IR  NPU p50  CPU p50  CERraw  CERtrad  Emitted script \n\n whisperbase  81 MB  101.8 ms  118.4 ms  0.5135  0.4865  MIXED \n whispersmall  245 MB  297.1 ms  394.1 ms  0.2027  0.1622  MIXED \n whispermedium  748 MB  849.7 ms  1182.4 ms  0.1081  0.0811  TRADITIONAL \n whisperlargev3  1.5 GB  FAILS  2136.1 ms  0.2703  0.0811  SIMPLIFIED \n\nwhisperbase is unusable for Chinese — half the characters wrong, two clips\nreturned romanized nonsense (土地認養案例 → thoody learn yang andi).\nwhispermedium is the pick: CERtrad 0.0811, and it is the largest Whisper that\nruns on this NPU at all.\n\nlargev3 compiles on the NPU (208.97 s) then fails every inference with\nZERESULTERRORUNINITIALIZED — driver is not initialized, reproduced twice. The NPU\nreports Status: OK and medium works in the same session, so this is a plugin size\nceiling. On CPU largev3 only matches medium's CERtrad while being 2.5×\nslower, and its CERraw is worse (0.2703) because it emits Simplified more often.\n\nAt small/medium the NPU is genuinely faster (1.33× and 1.39×). The \"NPU ≈ CPU\"\nresult above is a basesized finding, not a general one — NPU fixed overhead\namortizes as the model grows."
+ },
+ {
+  "id": "c011",
+  "file": "README.md",
+  "heading": "Guaranteeing Traditional output",
+  "text": "Guaranteeing Traditional output\nWhisper emits MIXED orthography and has no token to control it. INIZSTTSCRIPT=trad\npostprocesses through opencc: emitted script becomes TRADITIONAL (simp=0) and\nCERraw drops (0.2027 → 0.1757 on small) at no latency cost. Responses carry\ntextraw and scriptconverted so the conversion is auditable.\n\nUse charlevel s2t, never phraselevel s2twp — s2twp rewrites text that is\nalready Traditional (說明了 → 說明瞭), adding errors to correct transcriptions.\n\ninitialprompt and hotwords exist in WhisperGenerationConfig but fail on the\nNPU (Check 'roiend <= maxdim' failed). On CPU a Traditional style prompt\nreaches exactly the same 0.1757, so opencc is strictly better here.\n\nAt medium + opencc, CERraw equals CERtrad (0.0811) — every remaining error is a\nreal misrecognition (土地認養案例 → 土地任陽案例), not orthography.\n\nDevice proof under Chinese load: small NPU max 105.10 % / mean 96.95 %; medium NPU\nmax 97.11 % / mean 91.60 %, CPU 6.6 % mean. Over HTTP with language=<zh:\nmedium compile 102.87 s, p50 901.7 ms, VERDICT: PASS."
+ },
+ {
+  "id": "c012",
+  "file": "README.md",
+  "heading": "Server",
+  "text": "Server\ninizstt/sttserver.py — POST /transcribe (raw audio bytes or JSON {\"path\":…}),\nGET /health. Over HTTP on the NPU: compile 1.01 s, warmup 151.2 ms, p50 167.5 ms\nacross 11 requests. Smoke test passes with WER 0.0900 and all five error cases\nreturning 4xx."
+ },
+ {
+  "id": "c013",
+  "file": "README.md",
+  "heading": "Honest limitations",
+  "text": "Honest limitations\nTraditional output relies on opencc postprocessing, not on the model. No\n  inmodel control works on the NPU.\n Only 10 zh clips (39.7 s), short read speech. 74 reference characters is a small\n  sample — one clip moves CERtrad by ~0.01.\n largev3 unusable on this NPU; whether a newer driver lifts the ceiling is\n  untested.\n CERtrad 0.0811 ≈ 1 wrong character in 12. Fine for search or rough notes, not\n  verbatim transcription without review.\n Translation still unvalidated — task=translate was only run on English audio,\n  where returning English tests nothing.\n GPU.0 never benchmarked in any language.\n No longform audio (longest 29.4 s) and no streaming.\n The taiwanmandarinstt prior experience cited in the old roadmap does not exist\n  on this machine — this was built from scratch.\n The server binds to 127.0.0.1 without authentication. Audio is sensitive\n  input — do not expose on 0.0.0.0 without adding auth."
+ },
+ {
+  "id": "c014",
+  "file": "README.md",
+  "heading": "The NPU is the wrong device for this, by 20×",
+  "text": "The NPU is the wrong device for this, by 20×\nTask  NPU p50  CPU p50  NPU penalty \n\n summarize (120 tok)  14181.6 ms  704.9 ms  20.1× slower \n sentiment (8 tok)  1029.8 ms  43.8 ms  23.5× slower \n extract (40 tok)  2726.3 ms  119.4 ms  22.8× slower \n\nAccuracy is identical across devices (ROUGE1 0.3179 NPU / 0.3218 CPU; sentiment\n0.9250 both). The NPU is executing it — adapter at 98.37 % mean, proven with\nLUID counters — it is just bad at autoregressive decode, where each token is a separate\ngraph execution and a staticshape accelerator has nothing to amortize.\n\nauxserver.py defaults to CPU. Use INIZAUXDEVICE=NPU only to keep cores free\n(CPU 4.5 % vs 22.5 % during load), never for latency.\n\nThis is the opposite of the Whisper result above, and both are real: a fixedshape\nencoder pass suits the NPU; 60+ tiny sequential decode steps do not."
+ },
+ {
+  "id": "c015",
+  "file": "README.md",
+  "heading": "The earlier \"precision extraction fails\" warning does not reproduce",
+  "text": "The earlier \"precision extraction fails\" warning does not reproduce\nThe old roadmap warned that INT4 hallucinated and INT8 refused. Retested on 10 items\nwith exact known answers:\n\n Model  Device  exact  refusal  hallucination  wrong span \n\n INT8  NPU  7/10  0  0  3 \n INT4  NPU  6/10  0  0  4 \n INT8  CPU  6/10  0  0  4 \n\nZero refusals and zero hallucinations in 30 attempts. Every failure was a wrong\nspan — a real substring, just not the requested one: torch==2.9.1 instead of\n2.9.1, prodmediaeuwest1/thumbnails/ with the s3:// dropped. That is a\nboundaryselection problem, fixable with a regex filter, not fabrication. The stale\nwarning would have killed a task that works ~65 % of the time and fails safely."
+ },
+ {
+  "id": "c016",
+  "file": "README.md",
+  "heading": "Measured quality",
+  "text": "Measured quality\n12 CNN/DailyMail articles vs human highlights, 40 balanced SST2 sentences, greedy\ndecoding:\n\n Model  Device  ROUGE1  ROUGE2  ROUGEL  Sentiment  Extract \n\n INT8  NPU  0.3179  0.1299  0.2321  0.9250  7/10 \n INT4  NPU  0.3155  0.1041  0.2425  0.9000  6/10 \n INT8  CPU  0.3218  0.1336  0.2404  0.9250  6/10 \n\nSentiment is the one to actually deploy: 0.9250 accuracy, 0 unparsed outputs across\n40 items, 43.8 ms on CPU. INT4 is 4.2× faster than INT8 on NPU for ~equal ROUGE1, but\nROUGE2 drops 20 % — phrasing drifts further."
+ },
+ {
+  "id": "c017",
+  "file": "README.md",
+  "heading": "ROUGE hides a real failure mode",
+  "text": "ROUGE hides a real failure mode\ncnn10 (ROUGE1 0.089) produced fluent output that moved Roseanne Barr's booing and\nPresident Bush's \"disgraceful\" quote onto Vince Neil. Every entity is real and\npresent in the article, so substring grounding checks pass. Extrinsicentity audit:\nINT8 3/66 entities absent from source (4.5 %), INT4 0/47 (0.0 %) — but INT4 cites 29 %\nfewer entities, so that 0 % is partly terseness, not fidelity.\n\nMisattribution is not measured — it needs NLI or a human. Treat 0.5B summaries as\ndrafts."
+ },
+ {
+  "id": "c018",
+  "file": "README.md",
+  "heading": "Honest limitations",
+  "text": "Honest limitations\nSummarization is mediocre (ROUGE1 0.32 vs 0.40+ referencegrade) and\n  inconsistent (peritem 0.089–0.531).\n Misattribution rate unknown; one confirmed case in 12 is a floor, not a rate.\n Extraction ~65 % exact, no postfilter or retry implemented.\n Only 12 summarization items — wide error bars.\n No longcontext test (articles capped at 3500 chars), so \"context compression\"\n  remains unproven.\n GPU.0 never benchmarked; INT4 on CPU never benchmarked.\n No batching — requests serialize under a lock.\n The server binds to 127.0.0.1 without authentication; freetext input to a\n  generative model should not be exposed without auth."
+ },
+ {
+  "id": "c019",
+  "file": "README.md",
+  "heading": "✅ Iniz Power — real energy per task, not utilization vibes",
+  "text": "✅ Iniz Power — real energy per task, not utilization vibes\nIntel RAPL packagepower measurement (\\Energy Meter()\\Power) while hammering each\nworkload in a tight loop, idle subtracted, medianbased. Marginal energy per work unit:\n\n Workload  NPU  CPU  Winner per task \n\n guard inference  0.248 / 0.056 mWh  2.18 / 1.73 mWh  NPU, 8.8–30.8× less \n Whisperbase transcription  1.22 / 0.43 mWh  4.36 / 3.34 mWh  NPU, 3.6–7.8× less \n Qwen2.50.5B generation (60 tok)  72.6 / 18.7 mWh  10.0 / 7.2 mWh  CPU, 2.6–7.2× less \n\nEach pair is quietfloor / elevatedfloor assumption — the idle floor moved 7 W → 27 W\nmidcampaign (cause undetermined, no benchmark process alive), so ratios are ranges.\nNo verdict flips between them.\n\nThe finding that matters: the NPU draws less power on aux (33.6 W vs 76.1 W) but\ntakes 19× longer, spending more energy per task. Watts ≠ energy. Anyone routing by\nwatts or CPU % alone would pick the NPU and drain the battery faster.\n\nScope, stated plainly: RAPL package only (not wall power; NPUtile coverage\nunverified, so NPU wins are lower bounds), tightloop saturation (not sporadic use),\npoweranalysis.json marks comparisons below baseline drift as UNRESOLVED rather than\nprinting them."
+ },
+ {
+  "id": "c020",
+  "file": "README.md",
+  "heading": "Honest limitations",
+  "text": "Honest limitations\nFloor drift is the dominant uncertainty (±20 W vs signals of 25–95 W). Rerun\n  with the machine left alone and baseline immediately before AND after.\n ~86 Wh battery translations are illustrative, not promises (display/radio/dGPU\n  excluded).\n Linux not covered (needs RAPL sysfs path instead of perf counters)."
+ },
+ {
+  "id": "c021",
+  "file": "README.md",
+  "heading": "✅ Foundation: the NPU modelserving pattern",
+  "text": "✅ Foundation: the NPU modelserving pattern\nA reusable pattern for other NPU workloads: a persistent HTTP server process\n(separate from Hermes) that loads a quantized model once and serves repeatedly, with\ndevice \"NPU\" set explicitly.\n\nThere are two variants that must not be mixed:\n\n  Generative  Discriminative (guard) \n\n API  openvinogenai.LLMPipeline  core.compilemodel + read tensors \n Has lmhead  yes  no \n Output  text that must be parsed  score tensors directly \n Latency  2.7–6.6 s  35 ms \n\nGenerativepath pitfalls (applychattemplate signature, truncated maxnewtokens,\nINT4 garbage on rigid formats) live in\ninizagentguard/references/tokenizersignaturepitfall.md — they do not apply\nto the discriminative path.\n\nExpensive export pitfalls, all documented with real tracebacks in\ninizagentguard/references/npuexportpitfalls.md:\n\n torch.jit.trace, torch.onnx.export(dynamo=False), and\n  ov.convertmodel(model, exampleinput=…) all fail on Qwen2Model\n  (transformers 4.57 + torch 2.9) with invalid unorderedmap<K, T key.\n  The path that works: torch.export.export(…, strict=False) →\n  ov.convertmodel(exportedprogram).\n torch.export reports inputs as [?,?] even with a static example. The NPU\n  rejects dynamic shapes → ovmodel.reshape(...) is mandatory.\n The IR seqlen must equal training MAXLENGTH (128). A wrong value throws no\n  error — it just costs ~40% latency for nothing."
+ },
+ {
+  "id": "c022",
+  "file": "README.md",
+  "heading": "Power optimization",
+  "text": "Power optimization\nWhat is now measured: marginal SoCpackage energy per task for all three workloads\n(see ✅ Iniz Power above) — guard 8.8–30.8× cheaper on NPU, Whisper 3.6–7.8× cheaper\non NPU, aux generation 2.6–7.2× cheaper on CPU.\n\nWhat is still not measured: wall power (display, dGPU, losses), and therefore any\n\"hours of battery saved\" claim. That needs a batterydischarge run or an external\nmeter — RAPL package scope cannot produce it.\n\nThe \"learn usage patterns for automatic power management\" part is a much larger leap:\nit needs longhorizon observability, resource allocation policy, and possibly\ndriverlevel access. Treat it as a separate research project, not a Hermes skill.\n\nWhat is realistic as a skill: guidance on when to route a task to the NPU vs\nCPU/GPU based on workload shape (smallandfrequent vs largeandrare) — an extension\nof SKILL.md, not a new skill."
+ },
+ {
+  "id": "c023",
+  "file": "README.md",
+  "heading": "Repo Layout (part 1)",
+  "text": "Repo Layout (part 1)\ninizagentguard/\n├── SKILL.md                   Full skill: architecture, numbers, 13 pitfalls\n├── finetunelocal.py          3head training (verified == checkpoint2634)\n├── guardserver.py            NPU HTTP server (CompiledModel, not LLMPipeline)\n├── scripts/                   17 scripts: export, eval, verification, NPU proof\n├── results/                   Measured result JSON (independently inspectable)\n├── references/                Export/tokenizer pitfalls, NPU proof methodology\n└── notebooks/\n    ├── 01trainguard.ipynb             3head training (produces checkpoint2634)\n    └── 02verifyexportdeploy.ipynb    Verify → export IR → NPU proof → deploy\n\ninizstt/\n├── SKILL.md                   Full skill: size ladder, NPU ceiling, 14 pitfalls\n├── sttserver.py              NPU HTTP server (WhisperPipeline + opencc script mode)\n├── scripts/                   export/fetch audio, probe, bench, NPU proof, client\n│                                + zh: scriptcheck, fetchaudiozhtw, benchzhtw,\n│                                      testpromptfair, sttclientzhtw\n└── results/                   whisperbench{,zhtw}.json + LUID proofs + prompt test\n\ninizaux/\n├── SKILL.md                   Full skill: CPUbeatsNPU verdict, 8 pitfalls\n├── auxserver.py              HTTP server (LLMPipeline, CPU default by measurement)\n├── scripts/                   fetch data, bench, grounding audit, NPU proof, client\n└── results/                   auxbench, auxgrounding, auxproof JSON"
+ },
+ {
+  "id": "c024",
+  "file": "README.md",
+  "heading": "Repo Layout (part 2)",
+  "text": "Repo Layout (part 2)\ninizpower/\n├── SKILL.md                   Full skill: RAPL method, ranges, 7 pitfalls\n├── scripts/                   powerprobe.py, analyzepower.py\n└── results/                   power{guard,stt,aux}{NPU,CPU}.json + 5 baselines\n\nModel weights are not included (guard IR INT8 = 495 MB, beyond practical Git\nlimits). Get them from\nHuggingFace or generate them\nyourself with scripts/exportguardov.py seqlen 128. The STT IRs are not shipped\neither — regenerate whisperbase in ~3 minutes (English) or whispermedium in\n~7 minutes (Chinese) with\noptimumcli export openvino model openai/whisper<size weightformat int8 models/whisper<sizeint8ov."
+ },
+ {
+  "id": "c025",
+  "file": "README.md",
+  "heading": "Requirements",
+  "text": "Requirements\nIntel Core Ultra (or similar NPU) with Intel(R) AI Boost visible in\n  ov.Core().availabledevices\n openvino + nncf ≥ 2026.3, torch ≥ 2.9, transformers 4.57, peft 0.18,\n  datasets\n Generative path only: openvinogenai\n HFTOKEN from an environment variable — never hardcoded in source"
+ },
+ {
+  "id": "c026",
+  "file": "README.md",
+  "heading": "Getting Started (part 1)",
+  "text": "Getting Started (part 1)\n1. Verify the NPU is detected:\n   python c \"import openvino as ov; print(ov.Core().availabledevices)\"\n2. Fetch the weights:\n   hf download CH3NDev/inizagentguardint8 include \"openvino/\" localdir ~/npuprovider/models/inizguardint8ov\n   (or export your own: python inizagentguard/scripts/exportguardov.py seqlen 128)\n3. Prove NPU execution: python inizagentguard/scripts/provenpu.py npuonly\n4. Start the server: INIZGUARDDEVICE=NPU python inizagentguard/guardserver.py\n5. Test it: python inizagentguard/scripts/smokeclient.py\n6. Reproduce the numbers: python inizagentguard/scripts/evalfinal.py device NPU\n\nRead inizagentguard/SKILL.md before changing anything — all 13 pitfalls in there\nwere found through real failures, not speculation.\n\nFor offline speechtotext:\n\n1. Export the IR (~3 min):\n   optimumcli export openvino model openai/whisperbase weightformat int8 models/whisperbaseint8ov\n2. Fetch test audio with ground truth: python inizstt/scripts/fetchaudio.py\n3. Prove NPU execution: python inizstt/scripts/provewhispernpu.py NPU\n4. Start the server: INIZSTTDEVICE=NPU python inizstt/sttserver.py\n5. Test it: python inizstt/scripts/sttclient.py\n\nFor Traditional Chinese, export whispermedium instead and run the zh scripts:\n\nbash\noptimumcli export openvino model openai/whispermedium weightformat int8 \\\n  models/whispermediumint8ov\npython inizstt/scripts/fetchaudiozhtw.py        verifies refs are Traditional\npython inizstt/scripts/benchzhtw.py model ../models/whispermediumint8ov\nINIZSTTSCRIPT=trad INIZSTTMODEL=C:/path/to/models/whispermediumint8ov \\\n  python inizstt/sttserver.py                   allow ~103 s for NPU compile\npython inizstt/scripts/sttclientzhtw.py"
+ },
+ {
+  "id": "c027",
+  "file": "README.md",
+  "heading": "Getting Started (part 2)",
+  "text": "Getting Started (part 2)\ninizstt/scripts/scriptcheck.py measures whether any Chinese text is Simplified or\nTraditional — run it on a dataset before trusting its card.\n\nFor the auxiliary model (summaries / sentiment / extraction):\n\nbash\npython inizaux/scripts/fetchauxdata.py           CNN/DailyMail + SST2 + extraction\npython inizaux/scripts/benchaux.py model ../models/qwen2.50.5binstructint8ov device CPU\npython inizaux/scripts/proveauxnpu.py NPU        confirms NPU runs it, just slowly\nINIZAUXDEVICE=CPU python inizaux/auxserver.py\npython inizaux/scripts/auxclient.py\n\nRead inizaux/SKILL.md before switching that server to the NPU — it is 20× slower\nthere for the same accuracy.\n\nRead inizstt/SKILL.md first — it opens with a negative result (the NPU is not\nfaster than CPU for whisperbase) that changes how you should deploy it.\n\nTo reproduce the energy numbers (Windows, machine left alone):\n\nbash\npython inizpower/scripts/powerprobe.py baseline    idle floor; repeat 23x\npython inizpower/scripts/powerprobe.py guard NPU\npython inizpower/scripts/powerprobe.py guard CPU\npython inizpower/scripts/analyzepower.py           verdict table\n\nRead inizpower/SKILL.md before quoting any mWh figure — the floordrift caveat\nchanges single numbers into ranges."
+ },
+ {
+  "id": "c028",
+  "file": "README.md",
+  "heading": "Installing this skill into Hermes Agent",
+  "text": "Installing this skill into Hermes Agent\nThis skill is consumed by Hermes Agent.\nOnce installed, Hermes loads SKILL.md automatically when you mention things like\n\"run the guard on the NPU\", \"export a model to OpenVINO\", or \"prompt injection\ndetector\"."
+ },
+ {
+  "id": "c029",
+  "file": "README.md",
+  "heading": "1. Find the Hermes skills directory",
+  "text": "1. Find the Hermes skills directory\nbash\nhermes doctor         shows the active config paths\n\nThe skills directory lives at:\n\n OS  Path \n\n Linux / macOS  ~/.hermes/skills/ \n Windows  %LOCALAPPDATA%\\hermes\\skills\\ \n\nIf you use profiles, resolve it from $HERMESHOME ($HERMESHOME/skills/) —\ndo not hardcode ~/.hermes."
+ },
+ {
+  "id": "c030",
+  "file": "README.md",
+  "heading": "2. Clone into the skills directory",
+  "text": "2. Clone into the skills directory\nLinux / macOS\n\nbash\nmkdir p ~/.hermes/skills/localai\ngit clone https://github.com/Ch3nOff/hermesnpuskills.git \\\n  ~/.hermes/skills/localai/hermesnpuskills\n\nWindows (gitbash)\n\nbash\nmkdir p \"$LOCALAPPDATA/hermes/skills/localai\"\ngit clone https://github.com/Ch3nOff/hermesnpuskills.git \\\n  \"$LOCALAPPDATA/hermes/skills/localai/hermesnpuskills\"\n\nlocalai/ there is a category — Hermes uses subdirectories to group skills. Any\nother name works too."
+ },
+ {
+  "id": "c031",
+  "file": "README.md",
+  "heading": "3. Verify Hermes sees it",
+  "text": "3. Verify Hermes sees it\nbash\nhermes skills list  grep i iniz\n\nYou should see inizagentguard with its description. If not:\n\n Make sure SKILL.md sits at\n  <skills/localai/hermesnpuskills/inizagentguard/SKILL.md\n Make sure the YAML frontmatter at the very top of SKILL.md is intact ( … )\n Restart the Hermes session (skills are scanned at session start)"
+ },
+ {
+  "id": "c032",
+  "file": "README.md",
+  "heading": "4. Set up the runtime",
+  "text": "4. Set up the runtime\nThis skill needs its own venv — the Hermes venv has no torch:\n\nbash\npython m venv ~/npuprovider/.venv\n~/npuprovider/.venv/bin/pip install \\\n  \"torch==2.9.1\" indexurl https://download.pytorch.org/whl/cpu\n~/npuprovider/.venv/bin/pip install \\\n  \"transformers==4.57.1\" \"peft==0.18.0\" \"openvino==2026.3.0\" \\\n  \"openvinotokenizers==2026.3.0\" nncf datasets pandas pyarrow scikitlearn\n\nOn Windows use Scripts/ instead of bin/ and pip.exe instead of pip.\n\nVerify the NPU is detected:\n\nbash\n~/npuprovider/.venv/bin/python c \\\n  \"import openvino as ov; print(ov.Core().availabledevices)\""
+ },
+ {
+  "id": "c033",
+  "file": "README.md",
+  "heading": "5. Fetch the model weights",
+  "text": "5. Fetch the model weights\nbash\nhf download CH3NDev/inizagentguardint8 \\\n  include \"openvino/\" \\\n  localdir ~/npuprovider/models/inizguardint8ov\n\nOr export them yourself from the checkpoint:\n\nbash\ncd <skill/inizagentguard\npython scripts/exportguardov.py seqlen 128"
+ },
+ {
+  "id": "c034",
+  "file": "README.md",
+  "heading": "Running the server automatically (optional)",
+  "text": "Running the server automatically (optional)\nUse Hermes' builtin cronjob so the server comes up on boot, or launch it as a\nbackground process from a Hermes session:\n\nterminal(command=\"INIZGUARDDEVICE=NPU python <skill/inizagentguard/guardserver.py\",\n         background=true, notify=[\"listening on\"])"
+ },
+ {
+  "id": "c035",
+  "file": "README.md",
+  "heading": "Troubleshooting",
+  "text": "Troubleshooting\nSymptom  Cause & fix \n\n hermes skills list does not show the skill  SKILL.md is at the wrong level, or the YAML frontmatter is broken \n ModuleNotFoundError: torch  you are using the Hermes venv python instead of ~/npuprovider/.venv \n 'NPU' not available  Intel NPU driver not installed / not Core Ultra hardware \n AttributeError: 'list' object has no attribute 'keys'  extraspecialtokens from transformers 5.x — see pitfall 5 in SKILL.md \n p50 latency ~94 ms instead of ~35 ms  silently running on CPU. Check compiled.getproperty(\"EXECUTIONDEVICES\") \n accuracy suddenly ~0.74  wrong label mapping — use scripts/guardlabels.py \n\nEvery pitfall is detailed in inizagentguard/SKILL.md — 13 of them, all found\nthrough real failures."
+ },
+ {
+  "id": "c036",
+  "file": "iniz-agent-guard/SKILL.md",
+  "heading": "Skill: Iniz Agent Guard — Finetuned MultiHead Classifier on Intel NPU",
+  "text": "Skill: Iniz Agent Guard — Finetuned MultiHead Classifier on Intel NPU\nTrigger: When the task involves the Iniz Agent Guard model (promptinjection /\nshellrisk scoring), or more generally exporting a finetuned discriminative\ntransformer (backbone + regression/classification heads) to OpenVINO IR and serving\nit on an Intel Core Ultra NPU.\n\nBehavior: Reconstruct the head architecture from the checkpoint, validate the\nlabel mapping against the model itself, evaluate on heldout data, export via\ntorch.export → OpenVINO IR with static shapes, prove the NPU executes it, and\nserve through a direct CompiledModel call — never openvinogenai.LLMPipeline.\n\nEnvironment: openvino + nncf ≥ 2026.3, torch ≥ 2.9, transformers 4.57,\npeft 0.18, datasets. The NPU must appear in ov.Core().availabledevices."
+ },
+ {
+  "id": "c037",
+  "file": "iniz-agent-guard/SKILL.md",
+  "heading": "Scope: TWO different patterns, do not mix them",
+  "text": "Scope: TWO different patterns, do not mix them\nThis repo contains two paths that are easy to confuse:\n\n  Generative (predecessor)  Discriminative (current production) \n\n Model  plain Qwen2.50.5BInstruct  finetuned checkpoint2634 \n Has lmhead?  Yes  No \n Serving API  openvinogenai.LLMPipeline  core.compilemodel + read tensors \n Output  JSON text that must be parsed  3 score tensors directly \n maxnewtokens  relevant  concept does not exist here \n Latency  2.7–6.6 s  35 ms \n File  ~/npuprovider/scripts/npuserver.py (outside repo)  guardserver.py \n\nPitfalls specific to the generative path (applychattemplate signature, truncated\nmaxnewtokens, INT4 garbage on rigid formats) live in\nreferences/tokenizersignaturepitfall.md and do not apply to the\ndiscriminative path. Do not carry them into the guard server."
+ },
+ {
+  "id": "c038",
+  "file": "iniz-agent-guard/SKILL.md",
+  "heading": "Model Architecture (verified 100% against the checkpoint)",
+  "text": "Model Architecture (verified 100% against the checkpoint)\nCheckpoint: loraadapter.zip → checkpoint2634 (3 epochs, 2634 steps, final\nloss ≈ 0.0094).\n\nQwen2Model (AutoModel, NO lmhead) — 24 layers, hidden 896, vocab 151936\n  └─ LoRA r=8 α=32 on qproj,kproj,vproj,oproj  (192 loraA/loraB tensors)\n     tasktype=\"FEATUREEXTRACTION\"\n  └─ pooling: hidden state of the last nonpad token\n       ├─ injhead    Linear(896 → 1)   injection score (regression)\n       ├─ shellhead  Linear(896 → 1)   shellrisk score (regression, PROXY target)\n       └─ actionhead Linear(896 → 4)   action classification\n\n488 tensors, 0 missing / 0 unexpected on loadstatedict.\n\nfinetunelocal.py in this repo is verified to be the correct script: the\nGuardHeadModel it builds produces 488 statedict keys identical to the\ncheckpoint, and 11/11 hyperparameters match trainingargs.bin (batch 1,\ngrad accum 16, 3 epochs, lr 2e4, cosine, warmup 0.05, adamwtorch).\nA 3step CPU dryrun completed trainer.train() successfully\n(scripts/dryrunfinetune.py, scripts/verifyarchmatch.py).\n\nMAXLENGTH = 128 in finetunelocal.py is the correct seqlen — the production\nIR must be exported with seqlen 128, not 192. See the seqlen section below.\n\nActions: [\"PASS\", \"PAUSEAGENTS\", \"ISOLATEFILE\", \"USERCONFIRMATION\"] (indices 0–3)."
+ },
+ {
+  "id": "c039",
+  "file": "iniz-agent-guard/SKILL.md",
+  "heading": "Label Mapping — never guess, always validate",
+  "text": "Label Mapping — never guess, always validate\nThe mapping lives in scripts/guardlabels.py. It is the single source of truth:\n\npython\nSEVERITYMAP = {\"low\": 0.3, \"medium\": 0.5, \"high\": 0.7, \"critical\": 0.9}\nOVERRIDECATEGORIES    = {directinjection, jailbreak, personareplacement,\n                          manyshot, crescendo}         PAUSEAGENTS\nOBFUSCATIONCATEGORIES = {encodingobfuscation, tokensmuggling,\n                          indirectinjection, contextoverflow}   ISOLATEFILE\nEXTRACTIONCATEGORIES  = {systemextraction, promptleaking}       USERCONFIRMATION\nother label==1  PAUSEAGENTS ;  label==0  PASS\nshell = 0.0 (benign) / 0.6 (keyword proxy hit) / 0.1 (attack without keyword)\n\nThis mapping was proven by making the model the judge\n(scripts/verifyincomingmapping.py) — not trusted from a document:\n\n Metric  wrong mapping (fake categories)  correct mapping  delta \n\n action accuracy (test)  0.7410  0.9660  +0.225 \n action macroF1 (test)  0.4264  0.8176  +0.391 \n shell MAE (test)  0.0963  0.0465  −0.050 \n\nIf action metrics suddenly collapse to ~0.74 accuracy and ~0.43 macroF1, the\nmapping is almost certainly wrong, not the model.\n\nTwo categories in the mapping do not exist in the dataset (contextoverflow,\npromptleaking) — leave them in, so the mapping stays identical to what training used."
+ },
+ {
+  "id": "c040",
+  "file": "iniz-agent-guard/SKILL.md",
+  "heading": "seqlen 128 vs 192 — 128 is correct, and faster",
+  "text": "seqlen 128 vs 192 — 128 is correct, and faster\nMAXLENGTH=128 was used during training, so the production IR must be [1,128].\n\n seqlen  p50  p90  compile  action acc (test)  macroF1  inj MAE \n\n 128 (correct)  34.4 ms  34.8 ms  11.4 s  0.9650  0.8171  0.0651 \n 192 (wrong)  48.4 ms  48.7 ms  3.5 s  0.9660  0.8176  0.0643 \n\nQuality is effectively identical (difference <0.001) but seqlen 128 is ~29% faster.\nUse 128. The seqlen 192 IR is kept as models/inizguardovseq192 for comparison."
+ },
+ {
+  "id": "c041",
+  "file": "iniz-agent-guard/SKILL.md",
+  "heading": "Quality (IR INT8 @ NPU, seqlen 128, validated mapping)",
+  "text": "Quality (IR INT8 @ NPU, seqlen 128, validated mapping)\nMetric  validation (941)  test (942) \n\n action accuracy  0.9586  0.9650 \n macroF1 (classes present)  0.5727  0.8171 \n ROCAUC injection → attack  0.9670  0.9709 \n ROCAUC shell → proxy target  0.9648  0.9731 \n injection MAE  0.0637  0.0651 \n shell MAE  0.0479  0.0462 \n binary gate P / R / F1  0.962 / 0.985 / 0.973  0.968 / 0.984 / 0.976 \n\nPerclass (test): PASS F1 0.966 (n=390) · PAUSEAGENTS F1 0.971 (n=541) ·\nISOLATEFILE F1 0.667 (n=9) · USERCONFIRMATION F1 0.667 (n=2).\nThe last two have very small support — their numbers are not a reliable indicator.\n\nINT8 fidelity vs PyTorch fp32: maxΔinj = 0.045, maxΔshell = 0.036,\naction agreement 1.000 (40 samples)."
+ },
+ {
+  "id": "c042",
+  "file": "iniz-agent-guard/SKILL.md",
+  "heading": "shellhead: well trained, BUT its target is a proxy",
+  "text": "shellhead: well trained, BUT its target is a proxy\nMy initial conclusion (\"shellhead undertrained, only 12 codeexecution samples\")\nwas wrong — an artifact of using the wrong label mapping. With the correct\nmapping: ROCAUC shellhead → proxyhit = 0.973. This head is well trained.\n\nThe real problem is subtler: the target is a keyword proxy, not actual shell\ndanger. So shellhead is a learned keyword detector, inheriting the weaknesses of\nthat keyword list. Measured in scripts/diagshellhead2.py:\n\n Test group  shellmean \n\n dangerous shell with proxy keywords (bash, eval, os.system, …)  0.445 \n dangerous shell without proxy keywords (rm rf /, dd if=, mkfs, fork bomb)  0.165 \n benign text that happens to contain a keyword (\"What is eval() used for?\")  −0.007 \n pure injection with no shell element  0.059 \n\nThe 0.28 gap between the first two groups proves it. Practical consequence:\nthe server's keyword backstop MUST use a broader list than the training proxy —\nrm rf, dd if=, mkfs, chmod 777,  /dev/tcp, fork bombs, etc.\nThe good news: group 3 shows the head is not naive — benign text containing the words\neval/bash still scores ~0."
+ },
+ {
+  "id": "c043",
+  "file": "iniz-agent-guard/SKILL.md",
+  "heading": "Pitfalls (all verified empirically on this machine) (part 1)",
+  "text": "Pitfalls (all verified empirically on this machine) (part 1)\n1. A checkpoint without lmhead cannot be used with LLMPipeline. Inspect the\n   model.safetensors keys first. If there are head.weight entries and no\n   lmhead, it is a classifier: serve it via core.compilemodel(...) and read the\n   output tensors.\n2. torch.jit.trace and torch.onnx.export(dynamo=False) ALWAYS fail on\n   Qwen2Model (transformers 4.57 + torch 2.9):\n   RuntimeError: invalid unorderedmap<K, T key, originating from a walrus operator\n   in maskingutils. ov.convertmodel(model, exampleinput=...) fails too, because\n   internally it goes TorchScriptPythonDecoder → jit.trace.\n   The path that WORKS: torch.export.export(model, args, strict=False) followed\n   by ov.convertmodel(exportedprogram).\n3. attnimplementation must be eager before export\n   (config.attnimplementation = \"eager\", usecache = False).\n4. torch.export produces DYNAMIC dims (?,?) even with a static example input.\n   The NPU rejects dynamic shapes. You must call\n   ovmodel.reshape({0: PartialShape([1,S]), 1: PartialShape([1,S])}) before saving.\n5. extraspecialtokens list vs dict. Checkpoints written by transformers 5.x\n   store it as a list; transformers 4.x blows up with\n   AttributeError: 'list' object has no attribute 'keys'. Normalize to\n   extraspecialtokens = {} + additionalspecialtokens = <list.\n6. IR seqlen must equal training MAXLENGTH. A wrong value throws no error at\n   all — it just costs latency for no quality gain (192 vs 128: +40% latency, same\n   quality).\n7. Windows reports the NPU INSIDE the \\GPU Engine() counter set. There is no\n   NPU counter set on this Windows 11 build. \"GPU Engine activity exists\" is not\n   evidence of a fallback. Map the LUIDs first (this machine):\n    LUID  Device \n   \n    0x000000000x00011cf3  NPU — Intel(R) AI Boost (engtype compute, max 102.75%) \n    0x000000000x00010480  iGPU — Intel(R) Graphics \n    0x000000000x0001099d  dGPU — NVIDIA RTX 5060 \n   Loading device CPU → zero GPUEngine instances for that pid.\n   Rerun scripts/luidattribution.py <device on any other machine.\n8. compiled.getproperty(\"EXECUTIONDEVICES\") is the cheapest evidence. The NPU\n   returns the string NPU; CPU/GPU return a list.\n9. A wrong label mapping masquerades as a bad model. 0.74 accuracy / 0.43 macroF1\n   vs 0.97 / 0.82 — purely because of the mapping. Validate the mapping with the model\n   as judge before concluding anything about model quality.\n10. shellhead optimizes for a keyword proxy, not real danger (see section above).\n11. Linear regression heads without a sigmoid can leave the [0,1] range (small\n    negative values on benign input). Clamp on the server side.\n12. The multidevice benchmark phase contaminates counter evidence. Compiling to\n    GPU.0 makes the process hold a GPU context for its entire lifetime. Run the\n    counter proof in a separate process: provenpu.py npuonly.\n13. gradientcheckpointing=True + LoRA on CPU slows things down for no benefit and\n    requires gradients on the input embedding. Disable it for CPU dryruns."
+ },
+ {
+  "id": "c044",
+  "file": "iniz-agent-guard/SKILL.md",
+  "heading": "Server",
+  "text": "Server\nguardserver.py — direct CompiledModel, no text generation.\n\nGET  /health  device, seqlen, threshold, compiles, warmupms, latencyp50ms\nPOST /scan   {\"text\": \"...\", \"context\": \"...\"}\n   injectionscore, shellriskscore, action, confidence, actionprobs,\n     shellkeywordhits, rawinjection, rawshell, npums, device, model\n\nEnv: INIZGUARDMODEL, INIZGUARDDEVICE (NPU), INIZGUARDPORT (8009),\nINIZGUARDTHRESHOLD (0.30).\n\nMeasured (seqlen 128): npums p50 35.4 ms, client roundtrip p50 52 ms.\nSmoke test 9/10 matched coarse expectations; 1 false positive\n(\"Summarize this quarterly report in three bullet points\" → inj 0.648).\n\nSecurity: binds to 127.0.0.1 without authentication. Do not move it to\n0.0.0.0 without adding auth."
+ },
+ {
+  "id": "c045",
+  "file": "iniz-agent-guard/SKILL.md",
+  "heading": "Validation Criteria",
+  "text": "Validation Criteria\nAn NPU deployment is correct only when all of these hold:\n\n (A) compiled.getproperty(\"EXECUTIONDEVICES\") == NPU\n (B) GPUEngine counters for the server pid touch only the NPU LUID, CPU Total < 15%\n (C) p50 ≈ 35 ms at seqlen=128. Far above 90 ms → likely CPU fallback\n (D) IR input shape is static [1,128], not [?,?]\n (E) IR vs PyTorch fp32 action agreement == 1.000 over ≥40 samples\n (F) action accuracy ≥ 0.95 using guardlabels.py. If it is ~0.74 → wrong mapping"
+ },
+ {
+  "id": "c046",
+  "file": "iniz-agent-guard/SKILL.md",
+  "heading": "What is still open",
+  "text": "What is still open\nshellhead optimizes for a keyword proxy; needs a real shellcommand dataset to retrain.\n ISOLATEFILE (support 9) and USERCONFIRMATION (support 2) are too rare in the\n  test set to judge reliably — not necessarily broken, just unproven.\n False positives on benign business text (~2% FP rate).\n Threshold 0.30 comes from a testsplit sweep, not validated on real traffic.\n Automatic LoRA merge + export for the 3 custom heads is not in finetunelocal.py\n  (must go through exportguardov.py separately)."
+ },
+ {
+  "id": "c047",
+  "file": "iniz-agent-guard/SKILL.md",
+  "heading": "See Also",
+  "text": "See Also\nscripts/ — guardlabels.py, guardmodel.py, exportguardov.py, evalfinal.py,\n  verifyincomingmapping.py, verifyarchmatch.py, dryrunfinetune.py,\n  diagshellhead2.py, provenpu.py, luidattribution.py, smokeclient.py,\n  uploadhf.py, verifyhfdownload.py\n notebooks/01trainguard.ipynb — 3head training (produces checkpoint2634)\n notebooks/02verifyexportdeploy.ipynb — verify → export → NPU proof → deploy\n results/ — evalfinal.json, evalfinalseq128.json, mappingverdict.json,\n  npuverifyint8.json, npuproofnpuonly.json, luid{NPU,GPU0,CPU}.json\n references/npuexportpitfalls.md — real tracebacks for every failing export path\n references/tokenizersignaturepitfall.md — GENERATIVEpath pitfall (not the guard)\n references/npugpuutilproof.md — Task Manager evidence methodology (generative path)"
+ },
+ {
+  "id": "c048",
+  "file": "iniz-agent-guard/SKILL.md",
+  "heading": "Model Weights",
+  "text": "Model Weights\nArtifact  Location  Size \n\n OpenVINO IR INT8 (NPUready, seqlen=128)  CH3NDev/inizagentguardint8 → openvino/  495 MB \n 3head checkpoint + tokenizer (retrain / reexport)  same repo → checkpoint/  992 MB \n\nbash"
+ },
+ {
+  "id": "c049",
+  "file": "iniz-agent-guard/SKILL.md",
+  "heading": "raw checkpoint (for reexport / retraining)",
+  "text": "raw checkpoint (for reexport / retraining)\nhf download CH3NDev/inizagentguardint8 include \"checkpoint/\" \\\n  localdir ~/npuprovider/work/ckpt\n\nThe HF artifacts are verified intact: redownloaded from the Hub, compiled on the\nNPU (EXECUTIONDEVICES = NPU), and inference output matched the local model with\nmaxdelta = 0.0000000000 and identical actions — see scripts/verifyhfdownload.py."
+ },
+ {
+  "id": "c050",
+  "file": "iniz-aux/SKILL.md",
+  "heading": "(preamble)",
+  "text": "iniz-aux/SKILL.md :: name: inizaux\ndescription: SmallLLM summarize/sentiment/extract, CPU beats NPU here.\nversion: 0.1.0\nauthor: Matthew Chen (CH3NDev), Hermes Agent\nlicense: MIT\nplatforms: [windows, linux]\nmetadata:\n  hermes:\n    tags: [openvino, npu, qwen2.5, summarization, sentiment, localai]\n    relatedskills: [inizagentguard, inizstt]"
+ },
+ {
+  "id": "c051",
+  "file": "iniz-aux/SKILL.md",
+  "heading": "Skill: Iniz Aux — Small Generative Model for Cheap, Frequent Work",
+  "text": "Skill: Iniz Aux — Small Generative Model for Cheap, Frequent Work\nTrigger: When offloading small frequent LLM work (page summaries, captions,\nsentiment, field extraction) to a local quantized model, or when deciding whether an\nIntel NPU is the right device for an autoregressive workload.\n\nBehavior: Benchmark Qwen2.50.5BInstruct INT4/INT8 against ground truth on three\ntasks, prove which device executes it, then serve it over HTTP with the same process\nshape as guardserver.py — with the device default set by measurement, not habit.\n\nEnvironment: openvinogenai ≥ 2026.3, pyarrow. The NPU must appear in\nov.Core().availabledevices if you intend to test it."
+ },
+ {
+  "id": "c052",
+  "file": "iniz-aux/SKILL.md",
+  "heading": "Headline: the NPU is the wrong device for this, by 20×",
+  "text": "Headline: the NPU is the wrong device for this, by 20×\nTask  NPU p50  CPU p50  NPU penalty \n\n summarize (120 tok)  14181.6 ms  704.9 ms  20.1× slower \n sentiment (8 tok)  1029.8 ms  43.8 ms  23.5× slower \n extract (40 tok)  2726.3 ms  119.4 ms  22.8× slower \n\nAccuracy is identical across devices (ROUGE1 0.3179 NPU vs 0.3218 CPU; sentiment\n0.9250 both). The NPU is genuinely executing the model — adapter at 98.37 % mean,\nverified with LUID counters — it is simply bad at autoregressive decode, where every\ntoken is a separate graph execution and a staticshape accelerator has nothing to\namortize.\n\nauxserver.py therefore defaults to CPU. Use INIZAUXDEVICE=NPU only to keep\ncores free (CPU 4.5 % vs 22.5 % during load) — never for latency.\n\nThis is the opposite of the Whisper result in inizstt, and both are real: Whisper's\nencoder is one big fixedshape pass the NPU likes; a decoderonly LLM is 60+ tiny\nsequential passes it does not."
+ },
+ {
+  "id": "c053",
+  "file": "iniz-aux/SKILL.md",
+  "heading": "The earlier \"precision extraction fails\" claim does NOT reproduce",
+  "text": "The earlier \"precision extraction fails\" claim does NOT reproduce\nThe roadmap carried a warning from an earlier session: INT4 hallucinated, INT8 refused\nto answer on precision extraction. Retested on 10 items with exact known answers:\n\n Model  Device  exact  refusal  hallucination  wrong span \n\n INT8  NPU  7/10  0  0  3 \n INT4  NPU  6/10  0  0  4 \n INT8  CPU  6/10  0  0  4 \n\nZero refusals and zero hallucinations in 30 attempts. Every failure was a wrong\nspan — a real substring of the input, just not the requested one:\n\n asked for the version, got torch==2.9.1 instead of 2.9.1\n asked for the URL, got prodmediaeuwest1/thumbnails/ (dropped the s3://)\n asked for the event id, got signature errors\n INT8@CPU picked 4.12.0 where the answer was 4.11.2 — both versions appear\n\nThat is a boundary/selection problem, not fabrication, and it is fixable with a\nregex postfilter or a stricter prompt. The old claim would have led to abandoning a\ntask that works about 65 % of the time and fails safely.\n\nReproduced twice on INT8@NPU (7/10 both runs) before reporting."
+ },
+ {
+  "id": "c054",
+  "file": "iniz-aux/SKILL.md",
+  "heading": "Measured quality",
+  "text": "Measured quality\n12 CNN/DailyMail test articles (avg 1917 chars) vs human highlights; 40 balanced SST2\nsentences; 10 extraction items. Greedy decoding (dosample=False) so numbers repeat.\n\n Model  Device  ROUGE1  ROUGE2  ROUGEL  Sentiment acc  Extract \n\n INT8  NPU  0.3179  0.1299  0.2321  0.9250  7/10 \n INT4  NPU  0.3155  0.1041  0.2425  0.9000  6/10 \n INT8  CPU  0.3218  0.1336  0.2404  0.9250  6/10 \n\nSentiment is the standout: 0.9250 with 0 unparsed outputs across 40 items. It is\ncheap (8 tokens), the output space is two words, and it needs no postprocessing. If\nyou deploy one thing from this skill, deploy that.\n\nINT4 buys speed, not much loss. ROUGE1 within 0.002 of INT8 and 4.2× faster on\nNPU (3384.5 ms vs 14181.6 ms). ROUGE2 is the exception — 0.1041 vs 0.1299, a 20 %\ndrop, meaning INT4 phrasing drifts further from the reference even when content\noverlaps.\n\nROUGE1 ≈ 0.32 is mediocre: referencequality summarization scores 0.40+. Peritem\nspread was 0.089 → 0.531, so quality is inconsistent, not uniformly middling."
+ },
+ {
+  "id": "c055",
+  "file": "iniz-aux/SKILL.md",
+  "heading": "ROUGE hides a failure mode you must know about",
+  "text": "ROUGE hides a failure mode you must know about\ncnn10 scored ROUGE1 0.089 and its output was fluent, plausible, and factually\nwrong in a way no automatic metric here catches:\n\n Article: Roseanne Barr's rendition was booed; President Bush called her\n  performance \"disgraceful\". Vince Neil was criticised separately.\n Output: \"Vince Neil's performance ... with the crowd booing him and President Bush\n  calling it 'disgraceful.'\"\n\nEvery entity is real and present in the source. A substring check passes. ROUGE only\nnotices because the wording diverges — had the model misattributed using the\nreference's exact words, ROUGE would have gone up.\n\nscripts/checksummarygrounding.py measures what is mechanically checkable and is\nexplicit about what is not:\n\n Model  Entities cited  Extrinsic (absent from article)  Summaries with ≥1 \n\n INT8 @ NPU  66  3 (4.5 %)  2/12 \n INT4 @ NPU  47  0 (0.0 %)  0/12 \n\nINT4 looks cleaner here, but partly because it cites 29 % fewer entities (47 vs\n66) — a terser summary has less to get wrong. Do not read 0 % as \"INT4 is more\nfaithful\".\n\nMisattribution is NOT measured — detecting it needs NLI or a human. The script says\nso in its output rather than letting a clean extrinsic score imply faithfulness. Treat\nsummaries from a 0.5B model as drafts, and never let one make a factual claim\nunreviewed."
+ },
+ {
+  "id": "c056",
+  "file": "iniz-aux/SKILL.md",
+  "heading": "Procedure (part 1)",
+  "text": "Procedure (part 1)\n$V is .venv/Scripts/python.exe (Windows) or .venv/bin/python (Linux).\n\n1. Fetch groundtruth data. Completion: auxdata/{summarize,sentiment,extract}.json\n   exist with 12 / 40 / 10 items.\n   \n   terminal(command=\"$V u scripts/fetchauxdata.py\")\n   \n   Reads CNN/DailyMail and SST2 parquet directly with pyarrow — datasets is not\n   required.\n\n2. Benchmark each quantization on the NPU. Completion: auxbench.json per\n   model with ROUGE, accuracy, and an extraction outcome breakdown.\n   \n   terminal(command=\"$V u scripts/benchaux.py model ../models/qwen2.50.5binstructint8ov device NPU\")\n   terminal(command=\"$V u scripts/benchaux.py model ../models/qwen2.50.5binstructint4ov device NPU\")\n   \n\n3. Benchmark the CPU — do not skip this. It is what revealed the 20× gap.\n   \n   terminal(command=\"$V u scripts/benchaux.py model ../models/qwen2.50.5binstructint8ov device CPU\")\n   \n\n4. Check grounding. Completion: an extrinsicentity count per model.\n   \n   terminal(command=\"$V u scripts/checksummarygrounding.py auxbenchqwen2.50.5binstructint8ovNPU.json\")\n   \n\n5. Prove the device. Completion: npuactive: true for the NPU run, false for CPU.\n   \n   terminal(command=\"$V u scripts/proveauxnpu.py NPU\")\n   terminal(command=\"$V u scripts/proveauxnpu.py CPU\")\n   \n   Needed because two very different latencies could still mean a silent fallback —\n   here it confirmed the NPU is real and just slow."
+ },
+ {
+  "id": "c057",
+  "file": "iniz-aux/SKILL.md",
+  "heading": "Procedure (part 2)",
+  "text": "Procedure (part 2)\n6. Serve and smoke test. Completion: VERDICT: PASS, all five error cases 4xx.\n   \n   terminal(command=\"INIZAUXDEVICE=CPU $V scripts/auxserver.py\", background=True)\n   terminal(command=\"$V u scripts/auxclient.py\")"
+ },
+ {
+  "id": "c058",
+  "file": "iniz-aux/SKILL.md",
+  "heading": "Server",
+  "text": "Server\nauxserver.py — 255 lines, threaded HTTP, model loaded once, lockguarded inference.\n\nGET  /health       device, model, compiles, warmupms, pertask p50\nPOST /summarize   {\"text\": \"...\", \"maxnewtokens\": 120}  {\"summary\", \"ms\", ...}\nPOST /sentiment   {\"text\": \"...\"}  {\"sentiment\": positivenegativeunparsed, \"raw\"}\nPOST /extract     {\"text\": \"...\", \"question\": \"...\"}  {\"answer\", \"grounded\", \"raw\"}\n\nEnvironment: INIZAUXMODEL, INIZAUXDEVICE (default CPU),\nINIZAUXPORT (8011), INIZAUXMAXCHARS (8000).\n\n/extract returns grounded — whether the answer occurs in the input — plus a\nwarning that grounded ≠ correct. All four misses in the smoke test were\ngroundedbutwrong, so the flag alone must not be treated as validation.\n\nMeasured over HTTP on CPU: compile 1.29 s, warmup 160.5 ms, summarize p50 944.7 ms,\nsentiment p50 46.6 ms (12/12 correct), extract p50 122.2 ms (6/10 exact), 25 requests,\nVERDICT: PASS.\n\nSecurity: binds to 127.0.0.1 with no authentication. Freetext input to a\ngenerative model — do not expose it without auth."
+ },
+ {
+  "id": "c059",
+  "file": "iniz-aux/SKILL.md",
+  "heading": "Pitfalls (part 1)",
+  "text": "Pitfalls (part 1)\n1. Do not assume the NPU helps because it helped elsewhere. It is 20–23× slower\n   here than CPU at equal accuracy. Measure per workload shape: fixedshape encoder\n   passes (Whisper) win, autoregressive decode loses.\n\n2. Do not inherit a failure claim without retesting it. The \"INT4 hallucinates,\n   INT8 refuses\" warning did not reproduce at all — 0/30 refusals or hallucinations.\n   Stale negative findings cost more than stale positive ones because they stop work\n   that would succeed.\n\n3. grounded is not correct. Every extraction miss returned a genuine substring\n   of the input. A substring check cannot catch a wrongspan answer.\n\n4. ROUGE cannot see misattribution. cnn10 moved one person's booing and a\n   president's quote onto a different musician using only inarticle entities.\n   Fluent + grounded + wrong is the dangerous combination.\n\n5. Write the Qwen2.5 chat template by hand. openvinogenai's\n   Tokenizer.applychattemplate has a different signature from transformers' (no\n   tokenize kwarg); calling it the transformers way raises TypeError and invites a\n   silent fallback to an unformatted prompt.\n\n6. Set dosample=False. With sampling on, every benchmark run gives different\n   numbers and nothing is comparable.\n\n7. A terser model looks more faithful than it is. INT4 scored 0 extrinsic entities\n   partly by citing 29 % fewer entities than INT8. Normalize by entity count before\n   concluding anything."
+ },
+ {
+  "id": "c060",
+  "file": "iniz-aux/SKILL.md",
+  "heading": "Pitfalls (part 2)",
+  "text": "Pitfalls (part 2)\n8. NPU compile time for this model varies 3.55 s – 16.10 s across runs of the same\n   IR. Do not treat a single compile measurement as the number."
+ },
+ {
+  "id": "c061",
+  "file": "iniz-aux/SKILL.md",
+  "heading": "What is still open",
+  "text": "What is still open\nSummarization quality is mediocre (ROUGE1 0.32 vs 0.40+ for referencegrade)\n  and inconsistent (peritem 0.089–0.531). Usable for rough gisting, not for anything\n  a reader will rely on unreviewed.\n Misattribution rate is unmeasured. Needs an NLI model or human review; one\n  confirmed case in 12 summaries is a floor, not a rate.\n Extraction is ~65 % exact. No regex postfilter or retry is implemented, though\n  the failures (span boundaries) look mechanically fixable.\n Only 12 summarization items. ROUGE on 12 articles has wide error bars.\n No longcontext test. Articles were capped at 3500 chars; context compression on\n  genuinely long input is untested.\n GPU.0 never benchmarked — the iGPU might beat both for decode.\n INT4 on CPU never benchmarked (only INT4@NPU and INT8@CPU/NPU).\n No batching. Frequent small calls are served one at a time under a lock."
+ },
+ {
+  "id": "c062",
+  "file": "iniz-aux/SKILL.md",
+  "heading": "Verification",
+  "text": "Verification\n$V u scripts/fetchauxdata.py\n$V u scripts/benchaux.py model ../models/qwen2.50.5binstructint8ov device CPU\n$V u scripts/proveauxnpu.py NPU       expect npuactive: true\n$V u scripts/auxclient.py              expect VERDICT: PASS\n\nAccept only if: sentiment accuracy ≥ 0.90 with 0 unparsed, extraction exact ≥ 6/10\nwith 0 hallucinations, npuactive true on NPU and false on CPU, and the client prints\nVERDICT: PASS."
+ },
+ {
+  "id": "c063",
+  "file": "iniz-aux/SKILL.md",
+  "heading": "See Also",
+  "text": "See Also\nresults/auxbench{NPU,CPU}.json — peritem outputs, ROUGE, accuracy, outcomes\n results/auxbenchgrounding.json — extrinsicentity audit\n results/auxproof{NPU,CPU}.json — LUID device evidence\n inizstt/SKILL.md — where the NPU does win, and why the shape differs\n inizagentguard/SKILL.md — the discriminative pattern (35 ms, NPU 2.7× faster)"
+ },
+ {
+  "id": "c064",
+  "file": "iniz-power/SKILL.md",
+  "heading": "(preamble)",
+  "text": "iniz-power/SKILL.md :: name: inizpower\ndescription: Measure real energy per AI task with Intel RAPL.\nversion: 0.1.0\nauthor: Matthew Chen (CH3NDev), Hermes Agent\nlicense: MIT\nplatforms: [windows]\nmetadata:\n  hermes:\n    tags: [openvino, npu, power, energy, rapl, measurement, localai]\n    relatedskills: [inizagentguard, inizstt, inizaux]"
+ },
+ {
+  "id": "c065",
+  "file": "iniz-power/SKILL.md",
+  "heading": "Skill: Iniz Power — Real Energy per Task on Intel (RAPL)",
+  "text": "Skill: Iniz Power — Real Energy per Task on Intel (RAPL)\nTrigger: When someone claims a device \"saves power\" for an AI workload, or when\ndeciding NPU vs CPU on battery. Utilization percentages and latency ratios are not\nenergy — measure it.\n\nBehavior: Sample Intel RAPL package power via the Windows Energy Meter counters\nwhile hammering a workload in a tight loop, subtract an idle baseline, and report\nmarginal energy per work unit. Every number ships with its error bar, and effects\nsmaller than baseline drift are reported as UNRESOLVED instead of as numbers.\n\nEnvironment: Windows with \\Energy Meter()\\Power counters (present on this\nIntel Core Ultra 9 275HX, driver 32.0.100.4512). No extra installs — sampling is a\nPowerShell oneliner driven from Python. Linux needs a different path (RAPL sysfs);\nthis skill does not cover it."
+ },
+ {
+  "id": "c066",
+  "file": "iniz-power/SKILL.md",
+  "heading": "Headline results (Core Ultra 9 275HX, OpenVINO 2026.3)",
+  "text": "Headline results (Core Ultra 9 275HX, OpenVINO 2026.3)\nMarginal SoCpackage energy per work unit, idle subtracted, medianbased. The idle\nfloor moved midcampaign (7 W → 27 W, see below), so every ratio is reported as a\nrange: quietfloor assumption first, elevatedfloor assumption second. No verdict\nflips between them.\n\n Workload  NPU  CPU  Winner per task \n\n guard inference (Qwen2.50.5B + heads, INT8)  0.248 / 0.056 mWh  2.18 / 1.73 mWh  NPU, 8.8–30.8× less \n Whisperbase transcription (4.8 s clip, INT8)  1.22 / 0.43 mWh  4.36 / 3.34 mWh  NPU, 3.6–7.8× less \n Qwen2.50.5B generation (60 tokens, INT8)  72.6 / 18.7 mWh  10.0 / 7.2 mWh  CPU, 2.6–7.2× less \n\nThroughput in the same runs: guard 28.4/s NPU vs 12.1/s CPU; STT 6.9/s vs 5.3/s;\naux 0.10/s NPU vs 1.90/s CPU.\n\nScaled to a full charge (quietfloor figures; assumes an ~86 Wh battery from\nWin32Battery RemainingCapacity, ignoring everything else in the system):\n\n Workload  NPU  CPU \n\n guard inferences  ~347,000  ~39,000 \n transcriptions  ~70,000  ~20,000 \n generations (60 tok)  ~1,200  ~8,500 \n\nThe battery column is an illustration, not a promise — display, radio, and dGPU are\noutside RAPL package scope."
+ },
+ {
+  "id": "c067",
+  "file": "iniz-power/SKILL.md",
+  "heading": "The lesson that justifies this skill: watts ≠ energy",
+  "text": "The lesson that justifies this skill: watts ≠ energy\nThe aux case is why utilization reasoning fails. The NPU draws less power\n(33.6 W vs 76.1 W package median) but takes 19× longer per generation\n(9.9 s vs 0.5 s), so it spends 2.6–7.2× more energy per task depending on floor\nassumption. Anyone watching only watts, or only CPU %, would route this workload to\nthe NPU and drain the battery faster. The guard and STT cases go the other way (NPU\nwins 8.8–30.8× and 3.6–7.8×), which is exactly why perworkload measurement beats a\nblanket rule."
+ },
+ {
+  "id": "c068",
+  "file": "iniz-power/SKILL.md",
+  "heading": "Scope: what these numbers are and are not",
+  "text": "Scope: what these numbers are and are not\nRAPL package (raplpackage0pkg), not wall power. Display, dGPU, chargers,\n  and PSU losses are excluded. Do not compare these mWh figures with wallplug\n  measurements.\n Whether the NPU tile sits inside package0 on Arrow LakeHX is NOT verified\n  here. If any NPU consumption falls outside the package domain, NPUside figures\n  are UNDERcounted and the NPU looks better than it is. Treat NPU wins as a lower\n  bound, not a settled figure.\n Tightloop saturation, not sporadic use. Both devices were pegged; a single\n  request against an idle machine costs less (racetoidle dominates). Energy per\n  unit under saturation is the correct A/B metric, but do not quote it as \"one\n  inference drains X from your battery while you browse\".\n Medianbased. Idle shows 13–18 W background spikes, so all comparisons use\n  medians. Means are in the JSON for inspection.\n Coarse sampling. GetCounter yields ~1 sample/s despite the 250 ms sleep, so\n  a 25 s run is n≈22. Adequate for 25–90 s windows, useless for single requests."
+ },
+ {
+  "id": "c069",
+  "file": "iniz-power/SKILL.md",
+  "heading": "The baseline moved midcampaign — read this",
+  "text": "The baseline moved midcampaign — read this\nIdle floor before the campaign: 6.6 / 6.8 / 7.5 W medians across three 30 s runs.\nIdle floor right after: 26.6 W, sustained (min 24.2 W), with no benchmark process\nalive — verified zero npuprovider python processes and perprocess CPU under\n0.5 cores each. The desktop was active (Edge, Hermes, Roblox Studio, Discord), so the\nlikely cause is userside activity, but that is an inference, not a measurement.\n\nWhat this means for the numbers above:\n\n Workload signals (33–102 W) dwarf the drift (≤20 W). NPUvsCPU ratios are\n  approximately robust; absolute marginals carry a ±20 W packagelevel uncertainty\n  that no statistics can remove retroactively.\n Marginals were computed against the precampaign floor (7.2 W, median of medians —\n  robust to the outlier by construction).\n results/ keeps all five baselines (run1–3, final, check2) so anyone can see\n  the drift instead of taking a single floor on faith.\n If you rerun: do it with the machine left alone, and take a baseline immediately\n  before AND after. The script refuses to run workloads without a baseline file, but\n  it cannot refuse a stale one — that check is on you."
+ },
+ {
+  "id": "c070",
+  "file": "iniz-power/SKILL.md",
+  "heading": "Procedure",
+  "text": "Procedure\nRun from npuprovider/work/ with the project venv ($V = .venv/Scripts/python.exe).\n\n1. Idle baseline, machine untouched. Completion: powerbaseline.json exists with\n   ~30 s of samples. Repeat 2–3× and check the spread before continuing — if medians\n   move by more than your expected effect size, stop; the machine is too busy.\n   \n   terminal(command=\"$V u scripts/powerprobe.py baseline\")    INIZPOWERSECONDS=30 default\n   \n\n2. One workload, one device, sequentially. Never parallelize — two loads share the\n   package and both numbers become garbage.\n   \n   terminal(command=\"$V u scripts/powerprobe.py guard NPU\")\n   terminal(command=\"$V u scripts/powerprobe.py guard CPU\")\n   terminal(command=\"$V u scripts/powerprobe.py stt NPU\")\n   terminal(command=\"$V u scripts/powerprobe.py aux CPU\")\n   \n   Compile/warmup runs before sampling starts, so load cost is excluded. Slow workloads\n   need longer windows: aux on NPU managed 10 units in 90 s (INIZPOWERSECONDS=90).\n\n3. Analyze. Completion: poweranalysis.json with pertask verdicts.\n   \n   terminal(command=\"$V scripts/analyzepower.py\")\n   \n   Effects smaller than the baseline runtorun spread print as UNRESOLVED.\n\n4. Closing baseline. Proves the floor did not move under you. If it did, say so in\n   the writeup with both floors shown."
+ },
+ {
+  "id": "c071",
+  "file": "iniz-power/SKILL.md",
+  "heading": "Pitfalls (all hit on this machine) (part 1)",
+  "text": "Pitfalls (all hit on this machine) (part 1)\n1. Win32Battery DischargeRate reads 0 on AC. PowerLineStatus=Online,\n   DischargeRate=0 — the battery sensor is blind while plugged in. RAPL works\n   either way, which is why this skill uses it.\n\n2. GetCounter on Energy Meter is ~1 sample/s, not 4. The 250 ms sleep does not\n   set the rate; each counter read costs ~1.1 s. Size windows accordingly (≥25 s) and\n   do not try to profile single requests this way.\n\n3. The idle floor is the measurement, not a formality. Three quiet runs agreed\n   within 0.9 W; the postcampaign run was 19 W higher with no benchmark alive. A\n   single baseline taken on faith would have silently biased every marginal.\n\n4. Tight loops pin all cores on CPU. CPUside package power (76–102 W) is a 275HX\n   at full turbo, not \"one user asking one question\". Correct for A/B, misleading as\n   an absolute (\"the CPU uses 100 W to transcribe\").\n\n5. Warmup matters more than usual here. NPU compile runs 1–103 s depending on\n   model; sampling through it would charge onetime cost to every unit. The script\n   compiles and warms up before the sampler starts.\n\n6. No benchmark orphans — verify, don't assume. After the campaign, two python\n   processes with high cumulative CPU turned out to be the user's Hermes CLI servers\n   (started hours earlier), not leaked samplers. Win32Process.CommandLine settles\n   it in seconds; killing them would have broken the user's setup."
+ },
+ {
+  "id": "c072",
+  "file": "iniz-power/SKILL.md",
+  "heading": "Pitfalls (all hit on this machine) (part 2)",
+  "text": "Pitfalls (all hit on this machine) (part 2)\n7. Sequential or nothing. Background runs share the package. The campaign ran six\n   workloads plus baselines in one shell chain precisely so nothing overlapped."
+ },
+ {
+  "id": "c073",
+  "file": "iniz-power/SKILL.md",
+  "heading": "Verification",
+  "text": "Verification\n$V u scripts/powerprobe.py baseline             floor, machine untouched\n$V u scripts/powerprobe.py guard NPU            EXECUTIONDEVICES must print NPU\n$V u scripts/powerprobe.py guard CPU\n$V scripts/analyzepower.py                       expect RESOLVED verdicts\n\nAccept only if: the device line prints the requested device, poweranalysis.json\nmarks the comparison RESOLVED, and a closing baseline is within a few W of the\nopening one — otherwise report the drift, not just the headline."
+ },
+ {
+  "id": "c074",
+  "file": "iniz-power/SKILL.md",
+  "heading": "See Also",
+  "text": "See Also\nresults/poweranalysis.json — the verdict table\n results/power{guard,stt,aux}{NPU,CPU}.json — perrun rails, units, throughput\n results/powerbaseline{run1,run2,run3,final,check2}.json — the floor, including\n  the drift\n inizaux/SKILL.md — the 20× latency gap that motivated the energy question\n inizstt/SKILL.md, inizagentguard/SKILL.md — the workloads measured"
+ },
+ {
+  "id": "c075",
+  "file": "iniz-stt/SKILL.md",
+  "heading": "(preamble)",
+  "text": "iniz-stt/SKILL.md :: name: inizstt\ndescription: Offline speechtotext on Intel NPU via OpenVINO Whisper.\nversion: 0.1.0\nauthor: Matthew Chen (CH3NDev), Hermes Agent\nlicense: MIT\nplatforms: [windows, linux]\nmetadata:\n  hermes:\n    tags: [openvino, npu, whisper, speechtotext, offline, localai]\n    relatedskills: [inizagentguard]"
+ },
+ {
+  "id": "c076",
+  "file": "iniz-stt/SKILL.md",
+  "heading": "Skill: Iniz STT — Offline SpeechtoText on Intel NPU",
+  "text": "Skill: Iniz STT — Offline SpeechtoText on Intel NPU\nTrigger: When the task involves local/offline transcription, or serving a\ngenerative encoderdecoder (Whisper) on an Intel Core Ultra NPU through\nopenvinogenai.WhisperPipeline.\n\nBehavior: Export Whisper to OpenVINO IR INT8 with optimumcli, benchmark it\nagainst real audio with groundtruth transcripts, prove which device actually\nexecutes it, then serve it over HTTP with the same process shape as\ninizagentguard/guardserver.py.\n\nEnvironment: openvinogenai ≥ 2026.3, optimum[openvino], librosa,\nsoundfile, pyarrow, openccpythonreimplemented (Chinese only). The NPU must\nappear in ov.Core().availabledevices."
+ },
+ {
+  "id": "c077",
+  "file": "iniz-stt/SKILL.md",
+  "heading": "Pick the model by language, not by habit",
+  "text": "Pick the model by language, not by habit\nLanguage  Model  Why \n\n English  whisperbase  WER 0.0900, 169.9 ms — small buys nothing measurable \n Chinese  whispermedium + opencc  CERtrad 0.0811; base is 0.4865 and unusable \n\nlargev3 is not the answer: it cannot run on this NPU (see below) and on CPU\nit only matches medium's accuracy while being 2.5× slower.\n\nThe English and Chinese sections below reach opposite conclusions about the NPU,\nand both are correct: at base the NPU ties the CPU, at small/medium it wins by\n1.33–1.39×."
+ },
+ {
+  "id": "c078",
+  "file": "iniz-stt/SKILL.md",
+  "heading": "Full size ladder, Traditional Chinese (10 clips, 39.7 s)",
+  "text": "Full size ladder, Traditional Chinese (10 clips, 39.7 s)\nModel  IR  NPU p50  CPU p50  CERraw  CERtrad  Emitted script \n\n base  81 MB  101.8 ms  118.4 ms  0.5135  0.4865  MIXED \n small  245 MB  297.1 ms  394.1 ms  0.2027  0.1622  MIXED \n medium  748 MB  849.7 ms  1182.4 ms  0.1081  0.0811  TRADITIONAL \n largev3  1.5 GB  FAILS  2136.1 ms  0.2703  0.0811  SIMPLIFIED \n\nmedium is the sweet spot: same CERtrad as largev3 at 2.5× the speed, and it\nactually runs on the NPU."
+ },
+ {
+  "id": "c079",
+  "file": "iniz-stt/SKILL.md",
+  "heading": "The headline result is a negative one — read this first",
+  "text": "The headline result is a negative one — read this first\nOn this machine, the NPU is not faster than the CPU for whisperbase on English:\n\n Device  compile  p50 latency  p90  RTF (median)  WER  CPU load during run \n\n NPU  0.66 s  169.9 ms  232.5 ms  0.0196  0.0900  7.5 % mean / 10.6 % max \n CPU  0.58 s  167.8 ms  207.7 ms  0.0189  0.0900  27.0 % mean / 49.2 % max \n\nSame 8 LibriSpeech clips (86.34 s of audio), same 18/200 word errors, and\n8/8 normalized transcripts identical between devices.\n\nThe NPU wins on CPU offload, not speed: 7.5 % versus 27.0 % mean CPU while\ntranscribing. That is the actual reason to deploy this — transcription that does not\ncompete with the rest of the machine for cores. If you need raw wallclock speed for\nwhisperbase, use CPU.\n\nRTF 0.02 means both devices run roughly 50× faster than real time, so latency is\nnot the binding constraint at this model size anyway."
+ },
+ {
+  "id": "c080",
+  "file": "iniz-stt/SKILL.md",
+  "heading": "Do not skip the device proof",
+  "text": "Do not skip the device proof\nWhisperPipeline wraps several models and does not expose\nEXECUTIONDEVICES, so the guard skill's cheapest device check is unavailable here.\nTwo nearly identical latency columns are exactly what a silent fallback looks like,\nso this was verified independently with perpid GPUEngine counters\n(scripts/provewhispernpu.py):\n\n Requested device  NPU adapter (0x000000000x00011cf3)  iGPU  CPU Total  Verdict \n\n NPU  active, max 93.79 %, mean 89.06 % (engtype=compute)  idle  7.5 %  genuinely on the NPU \n CPU  idle  idle  27.0 % mean / 49.2 % max  genuinely on the CPU \n\n93 transcriptions in ~13 s on NPU, 87 on CPU. The NPU numbers are real, not a\nfallback that happens to match."
+ },
+ {
+  "id": "c081",
+  "file": "iniz-stt/SKILL.md",
+  "heading": "Traditional Chinese: model size decides this, not the device",
+  "text": "Traditional Chinese: model size decides this, not the device\nMeasured on 10 Common Voice 16.1 zhTW clips (39.7 s), references verified\nTraditional (simp=0 / trad=11) before use. CER, not WER — Chinese has no\nwhitespace word boundaries. See the size ladder above for the full comparison.\n\nwhisperbase is not usable for Chinese. Half the characters are wrong, and two\nclips came back as romanized nonsense (土地認養案例 → thoody learn yang andi).\nwhispersmall cuts CER 2.5×; whispermedium cuts it another 2× to CERtrad\n0.0811 and is the first size to emit TRADITIONAL on its own.\n\nAt whispersmall/medium the NPU also becomes genuinely faster (1.33× and\n1.39×), where at base the two devices were within 1 %. The NPU's fixed overhead\namortizes as the model grows, so the English section's \"NPU ≈ CPU\" verdict is a\nbasesized finding, not a general one."
+ },
+ {
+  "id": "c082",
+  "file": "iniz-stt/SKILL.md",
+  "heading": "largev3 does not run on this NPU",
+  "text": "largev3 does not run on this NPU\nIt compiles — 208.97 s, twice — then every inference fails:\n\nRuntimeError: L0 pfnAppendGraphExecute result: ZERESULTERRORUNINITIALIZED,\ncode 0x78000001  driver is not initialized\n\nReproduced twice with a fresh process each time. The NPU itself is healthy\n(GetPnpDevice reports Status: OK, driver 32.0.100.4512) and medium runs fine\nin the same session, so this is a size ceiling in the NPU plugin, not a broken driver.\nDo not report largev3 NPU numbers — there are none.\n\nOn CPU largev3 reaches CERtrad 0.0811 — identical to medium — at p50\n2136.1 ms (2.5× slower). Its CERraw is actually worse (0.2703 vs 0.1081)\nbecause it emits SIMPLIFIED far more often. There is no accuracy argument for it here."
+ },
+ {
+  "id": "c083",
+  "file": "iniz-stt/SKILL.md",
+  "heading": "Two CER numbers, because one would lie",
+  "text": "Two CER numbers, because one would lie\nWhisper's zh training data is overwhelmingly Simplified, so it transcribes Traditional\naudio correctly but sometimes writes Simplified characters. 開源服務 → 开源服务\nis a perfect transcription in the wrong orthography: CERraw scores it 2/4,\nCERtrad scores it 0/4."
+ },
+ {
+  "id": "c084",
+  "file": "iniz-stt/SKILL.md",
+  "heading": "Forcing Traditional output: opencc, and only charlevel",
+  "text": "Forcing Traditional output: opencc, and only charlevel\nINIZSTTSCRIPT=trad postprocesses output through opencc. Measured effect on\nwhispersmall: emitted script MIXED → TRADITIONAL (simp=0), CERraw\n0.2027 → 0.1757, latency unchanged (p50 301.0 → 307.8 ms).\n\nUse charlevel s2t, never phraselevel s2twp. s2twp rewrites text that is\nalready Traditional — measured failure: 說明了 → 說明瞭, which turned a\nperfect whispermedium transcription into a fresh error. Whisper output is MIXED, so\nthe converter must be idempotent on Traditional input. Charlevel s2t is; the phrase\ntables are not.\n\ninitialprompt and hotwords exist in WhisperGenerationConfig but fail on the\nNPU with Check 'roiend <= maxdim' failed — the staticshape decoder cannot\naccept a prefix. On CPU a Traditional style prompt does work (CERraw 0.1757,\nsimp 3→0, matching opencc exactly), so there is no reason to prefer it: opencc gets\nthe same number and runs on the NPU."
+ },
+ {
+  "id": "c085",
+  "file": "iniz-stt/SKILL.md",
+  "heading": "Device proof under Chinese load",
+  "text": "Device proof under Chinese load\nwhispersmall + zh on NPU: adapter 0x000000000x00011cf3 at max 105.10 %, mean\n96.95 %, CPU 4.7 % mean, 42 transcriptions in ~13 s.\nwhispermedium + zh on NPU: max 97.11 %, mean 91.60 %, CPU 6.6 % mean, 15\ntranscriptions in ~13 s. Evidence in results/whisperproofNPU{small,medium}zhtw.json.\n\nOver HTTP with language=<zh and INIZSTTSCRIPT=trad:\n\n Model  compile  p50  CERraw  CERtrad  Script \n\n small  12.13 s  307.8 ms  0.1757  0.1622  TRADITIONAL \n medium  102.87 s  901.7 ms  0.0811  0.0811  TRADITIONAL \n\nAt medium + opencc, CERraw equals CERtrad — every remaining error is a real\nmisrecognition (土地認養案例 → 土地任陽案例, 松楓橋 → 松峯橋), not\northography. Budget for that 102.87 s NPU compile at server start."
+ },
+ {
+  "id": "c086",
+  "file": "iniz-stt/SKILL.md",
+  "heading": "Scope: how this differs from Iniz Agent Guard",
+  "text": "Scope: how this differs from Iniz Agent Guard\nThe guard skill's central rule is \"never use a GenAI pipeline.\" That rule does not\napply here, and carrying it over would be the wrong call:\n\n  Iniz Agent Guard  Iniz STT \n\n Model kind  discriminative (backbone + 3 heads, no lmhead)  generative encoderdecoder \n Correct API  core.compilemodel + read tensors  openvinogenai.WhisperPipeline \n Export path  torch.export → ov.convertmodel (manual)  optimumcli export openvino \n Static shapes  mandatory, reshape() by hand  handled by the pipeline \n Device check  compiled.getproperty('EXECUTIONDEVICES')  not exposed — use LUID counters \n NPU vs CPU  NPU 2.7× faster  NPU ≈ CPU; win is CPU offload \n\nThe one thing that carries over unchanged is the server shape: load the model once\ninto a longlived process, guard inference with a lock, expose /health with real\ncounters, and never trust a device string without proof."
+ },
+ {
+  "id": "c087",
+  "file": "iniz-stt/SKILL.md",
+  "heading": "Procedure (part 1)",
+  "text": "Procedure (part 1)\nRun everything from the runtime dir with its venv ($V below is\n.venv/Scripts/python.exe on Windows, .venv/bin/python on Linux).\n\n1. Export the IR. Completion: openvinoencodermodel.xml and\n   openvinodecodermodel.xml exist and the dir is ~81 MB.\n   \n   terminal(command=\"optimumcli export openvino trustremotecode \\\n     model openai/whisperbase weightformat int8 models/whisperbaseint8ov\")\n   \n   NNCF reports int8asym, perchannel 100% (38/38) for the encoder and\n   100% (62/62) for the decoder.\n\n2. Fetch real audio with ground truth. Completion: audio/manifest.json lists 8\n   clips totalling 86.3 s, each with a reference string.\n   \n   terminal(command=\"$V scripts/fetchaudio.py\")\n   \n   Synthetic audio cannot produce a meaningful WER — this pulls LibriSpeech\n   validation00000of00001.parquet and decodes it with soundfile.\n\n3. Probe one device before benchmarking all of them. Completion: a perstage\n   timing table prints in under ~5 s.\n   \n   terminal(command=\"$V u scripts/probewhisper.py NPU\")\n   \n   Do this first — it separates \"pipeline construction is slow\" from \"inference is\n   slow\" and costs seconds instead of minutes.\n\n4. Benchmark with WER. Completion: whisperbench.json holds p50/p90, RTF, and\n   WER per device.\n   \n   terminal(command=\"$V u scripts/benchwhisper.py devices NPU,CPU\")\n   "
+ },
+ {
+  "id": "c088",
+  "file": "iniz-stt/SKILL.md",
+  "heading": "Procedure (part 2)",
+  "text": "Procedure (part 2)\n5. Prove the device. Completion: whisperproofNPU.json has\n   \"npuactive\": true, and the CPU run has it false.\n   \n   terminal(command=\"$V u scripts/provewhispernpu.py NPU\")\n   terminal(command=\"$V u scripts/provewhispernpu.py CPU\")\n   \n\n6. Serve and smoke test. Completion: VERDICT: PASS, overall WER < 0.25, all\n   five error cases return 4xx.\n   \n   terminal(command=\"INIZSTTDEVICE=NPU $V scripts/sttserver.py\", background=True)\n   terminal(command=\"$V u scripts/sttclient.py\")\n   \n\n7. For Chinese, use whispermedium and turn on the script converter. Completion:\n   fetchaudiozhtw.py prints reference script: ...  TRADITIONAL, and the bench\n   reports both CERraw and CERtrad.\n   \n   terminal(command=\"$V u scripts/fetchaudiozhtw.py\")\n   terminal(command=\"$V u scripts/benchzhtw.py model ../models/whispermediumint8ov\")\n   terminal(command=\"INIZSTTSCRIPT=trad INIZSTTMODEL=C:/…/whispermediumint8ov $V scripts/sttserver.py\", background=True)\n   terminal(command=\"$V u scripts/sttclientzhtw.py\")\n   \n   scripts/scriptcheck.py is the Simplified/Traditional detector — run it on any\n   new dataset before trusting its card. Pass an absolute forwardslash path to\n   INIZSTTMODEL; $HOME/... becomes \\c\\Users\\... under MSYS and the server\n   cannot find the IR. Allow ~103 s for the medium NPU compile.\n\n8. Do not bother with largev3 on the NPU. It compiles then fails every\n   inference (pitfall 11). If you want to reverify, expect a 209 s compile followed by\n   ZERESULTERRORUNINITIALIZED."
+ },
+ {
+  "id": "c089",
+  "file": "iniz-stt/SKILL.md",
+  "heading": "Server",
+  "text": "Server\nsttserver.py — 238 lines, threaded HTTP, model loaded once, lockguarded\ninference (the NPU serves one request at a time).\n\nGET  /health\n   {\"status\",\"device\",\"model\",\"compiles\",\"warmupms\",\"requestsserved\",\"latencyp50ms\"}\n\nPOST /transcribe\n  body: raw audio bytes (wav/flac/ogg — anything soundfile reads)\n        or JSON {\"path\": \"<abs path\", \"language\": \"<en\", \"task\": \"transcribe\"}\n  query: ?language=<en&task=translate&timestamps=1\n   {\"text\",\"durations\",\"rtf\",\"ms\",\"device\",\"model\",\"chunks\"?}\n\nEnvironment: INIZSTTMODEL, INIZSTTDEVICE (default NPU),\nINIZSTTPORT (default 8010), INIZSTTMAXBYTES (default 64 MB),\nINIZSTTSCRIPT (off default, or trad to force Traditional Chinese output).\n\nWith INIZSTTSCRIPT=trad the response also carries scriptmode,\nscriptconverted, and textraw (the preconversion text) when a conversion\nhappened — so the postprocessing is auditable rather than silent.\n\nSecurity: binds to 127.0.0.1 with no authentication. Audio is sensitive\ninput — do not move it to 0.0.0.0 without adding auth first. The server prints this\nwarning on every start.\n\nMeasured over HTTP on the NPU: compile 1.01 s, warmup 151.2 ms,\np50 167.5 ms across 11 requests, clientside p50 210 ms. Perclip RTF ranged\n0.0153 (29.4 s clip) to 0.0425 (5.9 s clip) — longer audio amortizes better."
+ },
+ {
+  "id": "c090",
+  "file": "iniz-stt/SKILL.md",
+  "heading": "Pitfalls (all hit on this machine) (part 1)",
+  "text": "Pitfalls (all hit on this machine) (part 1)\n1. datasets cannot decode audio without torchcodec. loaddataset(...) on an\n   audio dataset raises ImportError: To support decoding audio data, please install\n   'torchcodec'. Read the parquet directly with pyarrow and decode the bytes\n   field with soundfile — scripts/fetchaudio.py does this.\n\n2. Piping a long benchmark through tail hides all progress. The first full\n   benchmark ran 7 minutes with zero visible output because  tail 70 buffered\n   everything; it looked like a hang. Two independent checks said otherwise: the\n   process had CPUseconds=0 and no GPUEngine activity. Always run these with\n   python u and no pipe.\n\n3. WhisperPipeline has no EXECUTIONDEVICES. It wraps encoder + decoder, so\n   getproperty is unavailable. Use the LUID counter method\n   (scripts/provewhispernpu.py), not assert device == 'NPU'.\n\n4. Comparing raw strings gives a fake ~80 % WER. LibriSpeech references are\n   uppercase with no punctuation; Whisper emits \"Mr. Quilter's ...\". Normalize\n   (uppercase, strip punctuation, collapse spaces) before scoring. WER 0.09 vs 0.80\n   is entirely this.\n\n5. GPU.0 was never benchmarked. Only NPU and CPU are measured here. The iGPU\n   column is absent, not zero.\n\n6. task=translate on English audio returns English. Not a bug — verified\n   working, but it proves nothing about translation quality. Crosslanguage\n   translation remains unvalidated."
+ },
+ {
+  "id": "c091",
+  "file": "iniz-stt/SKILL.md",
+  "heading": "Pitfalls (all hit on this machine) (part 2)",
+  "text": "Pitfalls (all hit on this machine) (part 2)\n7. Dataset cards lie about orthography — measure it. CJY/ChineseDialogue180k\n   looked like a Chinese test set but is Simplified (980 Simplifiedonly chars vs\n   4 Traditional in a 92row sample) and has no ASR ground truth (it is\n   speechtospeech dialogue, 126 GB). scripts/scriptcheck.py settles this in\n   seconds; JacobLinCool/commonvoice161zhTWclean measured simp=0 / trad=99.\n\n8. datasets audio decode needs torchcodec, and parquet row groups save time.\n   pq.ParquetFile(...).readrowgroup(0) pulls 100 rows out of a 341 MB shard\n   without materializing the whole file.\n\n9. MSYS mangles $HOME for native programs. INIZSTTMODEL=\"$HOME/...\" reached\n   the server as \\c\\Users\\Matthew Chen\\... and it raised\n   FileNotFoundError: Whisper IR not found. Use C:/Users/... forwardslash paths.\n\n10. whispersmall compile is 11.64 s on NPU (vs 1.01 s for base, 102.87 s for\n    medium, 208.97 s for largev3). It looks like a hang if you expect baselike\n    startup. Compile time grows far faster than model size.\n\n11. largev3 compiles on the NPU then fails every inference with\n    ZERESULTERRORUNINITIALIZED ... driver is not initialized. Reproduced twice.\n    The NPU is healthy and medium works in the same session — this is a plugin size\n    ceiling. medium is the largest usable Whisper on this NPU.\n\n12. opencc s2twp corrupts alreadyTraditional text. 說明了 → 說明瞭 added a\n    fresh error to a perfect transcription. Whisper output is MIXED, so the converter\n    must be idempotent: use charlevel s2t, applied per character."
+ },
+ {
+  "id": "c092",
+  "file": "iniz-stt/SKILL.md",
+  "heading": "Pitfalls (all hit on this machine) (part 3)",
+  "text": "Pitfalls (all hit on this machine) (part 3)\n13. initialprompt / hotwords fail on the NPU with\n    Check 'roiend <= maxdim' failed — the staticshape decoder cannot take a\n    prefix. They work on CPU.\n\n14. Do not put the clips' own target words in hotwords when benchmarking. The\n    first prompt experiment did exactly that and reported CER 0.1486 — the model was\n    handed the answer. scripts/testpromptfair.py aborts if any hotword appears in\n    any reference, and includes a wrongdomain control condition."
+ },
+ {
+  "id": "c093",
+  "file": "iniz-stt/SKILL.md",
+  "heading": "What is still open",
+  "text": "What is still open\nTraditional output relies on postprocessing. whispermedium emits TRADITIONAL\n  unaided, but not reliably; INIZSTTSCRIPT=trad is what guarantees it. There is no\n  inmodel control that works on the NPU.\n Only 10 zh clips (39.7 s), all short (2.8–5.3 s) and all read speech. Common\n  Voice is not conversational audio, and 74 reference characters is a small sample —\n  a single clip moves CERtrad by ~0.01.\n largev3 is unusable on this NPU and matches medium on CPU. Whether a newer\n  NPU driver lifts the ceiling is untested.\n Translation still unvalidated. task=translate was only run on English audio,\n  where it correctly returns English — that tests nothing.\n No longform audio. Longest clip anywhere is 29.4 s (English). Whisper's 30 s\n  window means chunking past that is unverified.\n GPU.0 never benchmarked in any language.\n No streaming / partial results. Requests are wholefile only.\n CERtrad 0.0811 is roughly 1 wrong character in 12. Good enough for search or\n  rough notes, not for verbatim transcription without review.\n The taiwanmandarinstt prior experience cited in the repo roadmap does not\n  exist on this machine — no local project, no Whisper in the HF cache. Everything\n  here was built from scratch."
+ },
+ {
+  "id": "c094",
+  "file": "iniz-stt/SKILL.md",
+  "heading": "Verification",
+  "text": "Verification\n$V u scripts/probewhisper.py NPU           stage timings, ~5 s\n$V u scripts/benchwhisper.py devices NPU,CPU\n$V u scripts/provewhispernpu.py NPU       expect npuactive: true\n$V u scripts/sttclient.py                  expect VERDICT: PASS"
+ },
+ {
+  "id": "c095",
+  "file": "iniz-stt/SKILL.md",
+  "heading": "Traditional Chinese",
+  "text": "Traditional Chinese\n$V u scripts/fetchaudiozhtw.py            expect  TRADITIONAL\n$V u scripts/benchzhtw.py model ../models/whispermediumint8ov\n$V u scripts/testpromptfair.py            leak check must pass first\n$V u scripts/sttclientzhtw.py             expect VERDICT: PASS\n\nAccept only if: npuactive is true for the NPU run and false for CPU, English\nWER ≤ 0.10 with 8/8 transcript agreement, Chinese CERtrad ≤ 0.10 on\nwhispermedium with emitted script TRADITIONAL, and both clients print\nVERDICT: PASS."
+ },
+ {
+  "id": "c096",
+  "file": "iniz-stt/SKILL.md",
+  "heading": "See Also",
+  "text": "See Also\nresults/whisperbench.json — English perdevice latency, RTF, WER, transcripts\n results/whisperbenchzhtw{,small,medium}.json — Chinese CER per model/device\n results/whisperbenchzhtwlargecpu.json — largev3, CPU only (NPU failed)\n results/promptfairCPUwhispersmallint8ov.json — prompt/hotwords experiment\n  with leak check and wrongdomain control\n results/whisperproofNPU.json, whisperproofCPU.json,\n  whisperproofNPU{small,medium}zhtw.json — LUID evidence\n inizagentguard/SKILL.md — the discriminative counterpart and the shared\n  server/proof discipline"
+ },
+ {
+  "id": "c097",
+  "file": "iniz-agent-guard/references/npu-export-pitfalls.md",
+  "heading": "NPU Export Pitfalls — real tracebacks per path",
+  "text": "NPU Export Pitfalls — real tracebacks per path\nAll results below were measured on this machine (Core Ultra 9 275HX, Windows 11,\ntorch 2.9.1+cpu, transformers 4.57.1, openvino 2026.3.0) on\nQwen2Model + 3 linear heads, LoRA r=8 already merged, seqlen=192.\n\nComparison script: ~/npuprovider/work/debugtrace.py"
+ },
+ {
+  "id": "c098",
+  "file": "iniz-agent-guard/references/npu-export-pitfalls.md",
+  "heading": "Summary",
+  "text": "Summary\nPath  Result \n\n torch.jit.trace(model, args, strict=False)  FAIL \n torch.export.export(model, args, strict=False)  OK \n torch.onnx.export(..., dynamo=True)  FAIL (dependency) \n torch.onnx.export(..., dynamo=False)  FAIL (same as jit.trace)"
+ },
+ {
+  "id": "c099",
+  "file": "iniz-agent-guard/references/npu-export-pitfalls.md",
+  "heading": "1. torch.jit.trace — FAIL",
+  "text": "1. torch.jit.trace — FAIL\nif (paddinglength := kvlength + kvoffset  attentionmask.shape[1])  0:\nRuntimeError: invalid unorderedmap<K, T key\n\nSource: transformers/maskingutils.py. A walrus operator inside a condition\nthat depends on attentionmask.shape makes TorchScript fail to build the type\nmap. Changing attnimplementation to eager does not help — the error\nstays the same, because the problem is in the masking code, not in the attention\nimplementation.\n\nDo not waste time trying:\n strict=True / strict=False — both fail\n checktrace=False — fails at a stage before the check\n exampleinput with an allones mask — fails\n ov.convertmodel(model, exampleinput=...) — fails, because internally it\n  calls TorchScriptPythonDecoder → jit.trace:\n\nFile \"openvino/tools/ovc/mocfrontend/pytorchfrontendutils.py\", line 162, in getpytorchdecoder\n    decoder = TorchScriptPythonDecoder(...)\nFile \"openvino/frontend/pytorch/tsdecoder.py\", line 84, in init\n    raise RuntimeError(\"Couldn't get TorchScript module by tracing.\")"
+ },
+ {
+  "id": "c100",
+  "file": "iniz-agent-guard/references/npu-export-pitfalls.md",
+  "heading": "2. torch.export.export — OK (the path actually used)",
+  "text": "2. torch.export.export — OK (the path actually used)\npython\nmodel.config.attnimplementation = \"eager\"\nmodel.config.usecache = False\nwith torch.nograd():\n    ep = torch.export.export(wrapper, (exids, exmask), strict=False)\novmodel = ov.convertmodel(ep)           accepts the ExportedProgram directly\novmodel.reshape({0: ov.PartialShape([1, S]), 1: ov.PartialShape([1, S])})\n\nTwo steps that are easy to miss:\n\n1. eager is required. Without it the sdpa path gets exported too and the\n   result does not compile cleanly on the NPU.\n2. reshape is required. torch.export reports the inputs as [?,?]\n   even though the example input is [1,192]:\n\n   \n   [export] inputs : [('inputids', '[?,?]', 'i64'), ('attentionmask', '[?,?]', 'i64')]    before reshape\n   [export] inputs : [('inputids', '[1,192]', 'i64'), ('attentionmask', '[1,192]', 'i64')]  after\n   \n\n   The NPU does not accept dynamic dimensions."
+ },
+ {
+  "id": "c101",
+  "file": "iniz-agent-guard/references/npu-export-pitfalls.md",
+  "heading": "GPU Process Memory / GPU Non Local Adapter Memory",
+  "text": "GPU Process Memory / GPU Non Local Adapter Memory\nThe NPU shows up as an adapter under \\GPU Engine(). Mapping produced by\nwork/luidattribution.py:\n\n LUID  Device  Evidence \n\n 0x000000000x00011cf3  Intel(R) AI Boost (NPU)  NPU load → engtype compute max 102.75 % \n 0x000000000x00010480  Intel(R) Graphics (iGPU)  GPU.0 load → engtype compute max 100.07 % \n 0x000000000x0001099d  NVIDIA RTX 5060 (dGPU)  idle engines only, 0 % \n\nA CPU device load → zero GPUEngine instances for that pid.\n\nPnP IDs for confirmation:\n\nIntel(R) AI Boost                  PCI\\VEN8086&DEVAD1D\nIntel(R) Graphics                  PCI\\VEN8086&DEV7D67\nNVIDIA GeForce RTX 5060 Laptop GPU PCI\\VEN10DE&DEV2D59"
+ },
+ {
+  "id": "c102",
+  "file": "iniz-agent-guard/references/npu-export-pitfalls.md",
+  "heading": "Measurement pitfall",
+  "text": "Measurement pitfall\nCompiling a model to GPU.0 inside the same process makes that process hold a\nGPU context until it exits — the GPUEngine counters for that pid then cannot be\nused as evidence of \"never touched the GPU\". Run the counter proof in a separate\nprocess: python provenpu.py npuonly."
+ },
+ {
+  "id": "c103",
+  "file": "iniz-agent-guard/references/npu-gpu-util-proof.md",
+  "heading": "NPU Utilization Evidence — Iniz Agent Guard",
+  "text": "NPU Utilization Evidence — Iniz Agent Guard\nStatus: fills in the TODO previously flagged in this skill package.\nThis evidence was gathered during the hermesnpuprovider debugging\nsession (the predecessor of this project, a generative\nQwen2.50.5BInstruct model — not the finetuned 3head version), but\nthe verification methodology applies equally to confirming that\nguardserver.py really runs on the NPU rather than silently falling\nback to CPU/GPU."
+ },
+ {
+  "id": "c104",
+  "file": "iniz-agent-guard/references/npu-gpu-util-proof.md",
+  "heading": "Evidence summary",
+  "text": "Evidence summary\nThree independent sources were collected and they agree with each other:\n\n1. Visual Task Manager — three screenshots show the NPU graph\n   jumping to a plateau pattern (a sharp rise when inference starts,\n   flat at the top for the duration, a sharp drop when it finishes)\n   exactly within the time window in which the benchmark ran, while\n   GPU 0 (Intel iGPU) and GPU 1 (NVIDIA RTX discrete) stayed flat and\n   low over the same window.\n\n2. CSV performance sampler (perfsamplergpudetail.ps1 in this\n   references/ folder) — records gpuutilsumpct and\n   cpuutilpct per timestamp. The CPU peaked at roughly 4.7% during\n   the inference window, far below what you would expect if the\n   workload were really running on the CPU.\n\n3. Perprocess GPU attribution — the perPID breakdown shows that\n   the GPU activity in that same window came from UI processes (Hermes\n   UI itself, the Windows DWM compositor) — NOT from the Python/server\n   process running model inference."
+ },
+ {
+  "id": "c105",
+  "file": "iniz-agent-guard/references/npu-gpu-util-proof.md",
+  "heading": "⚠️ An honest note on the scope of this evidence",
+  "text": "⚠️ An honest note on the scope of this evidence\nThis evidence was gathered for a plain 0.5B generative model\n  (hermesnpuprovider, before the 3head finetuning), not for the\n  current guardserver.py directly. The methodology is identical and\n  the device (NPU) in guardserver.py has not changed, but if you\n  want evidence that is 100% specific to the finetuned 3head model,\n  repeat this Task Manager capture + CSV sampler AFTER the finetuned\n  model has actually been exported to OpenVINO INT8 and served through\n  guardserver.py.\n gpuutilsumpct in the raw CSV did at one point show 1741%\n  in the same window as NPU inference — this looked suspicious AT\n  FIRST, but the perprocess breakdown (point 3 above) explains that it\n  came from the Hermes UI rendering streaming output in real time, not\n  from the inference process itself. Noted here so that it is not\n  misread as contradictory evidence by someone rereading the raw CSV\n  without this context.\n The measured latency (~2.7–6.6 seconds depending on INT4/INT8\n  quantization) is far above the blueprint's original target (<15ms) —\n  a fact anyone reading this proofofutilization needs to know so they\n  do not conflate \"the NPU is being used\" with \"the NPU is fast\". NPU\n  usage is confirmed; its absolute performance is a separate question,\n  and the current generation of NPU hardware (Meteor Lake/Arrow Lake)\n  still has high variance even for small LLM workloads."
+ },
+ {
+  "id": "c106",
+  "file": "iniz-agent-guard/references/npu-gpu-util-proof.md",
+  "heading": "How to replicate this verification yourself",
+  "text": "How to replicate this verification yourself\n1. Run scripts/guardserver.py.\n2. Open Task Manager  Performance  NPU before firing any request\n   at the server.\n3. Send a few test requests (see the curl examples in the Quick\n   Reference section of SKILL.md).\n4. Observe: the NPU graph must rise in the same time window in which\n   the requests are processed; the discrete GPU graph (if any) must\n   stay flat over that same window.\n5. Run references/perfsamplergpudetail.ps1 in parallel to obtain a\n   CSV record that can be reexamined, rather than just a fleeting\n   visual observation.\n\nGenuinely convincing evidence requires all three of the above to line\nup within one and the same time window — not just a single source on\nits own."
+ },
+ {
+  "id": "c107",
+  "file": "iniz-agent-guard/references/tokenizer-signature-pitfall.md",
+  "heading": "Pitfall: The applychattemplate Signature Differs Between openvinogenai and transformers",
+  "text": "Pitfall: The applychattemplate Signature Differs Between openvinogenai and transformers\nStatus: this file is referenced in SKILL.md (Pitfalls section) but had\nnot previously been written — it is written now based on a bug that was\nactually found and fixed during the hermesnpuprovider debugging\nsession (the predecessor of inizagentguard)."
+ },
+ {
+  "id": "c108",
+  "file": "iniz-agent-guard/references/tokenizer-signature-pitfall.md",
+  "heading": "The problem",
+  "text": "The problem\ntransformers.AutoTokenizer.applychattemplate() accepts the\ntokenize=False kwarg to return the raw prompt string (instead of token\nids) — this is the common pattern that most people expect.\n\nopenvinogenai's tokenizer, even though its API was intentionally made\nto resemble transformers, does not support the tokenize= kwarg\non its own applychattemplate(). Calling it with tokenize=False on\nan openvinogenai tokenizer raises a TypeError."
+ },
+ {
+  "id": "c109",
+  "file": "iniz-agent-guard/references/tokenizer-signature-pitfall.md",
+  "heading": "Why this is silently dangerous",
+  "text": "Why this is silently dangerous\nIf the code is written with a try/except pattern that catches\nTypeError and then falls back to a manual prompt formatter (e.g.\nconcatenating <role by hand), this bug never surfaces as a\nvisible error — the program keeps running, but silently uses the wrong\nprompt format for the model. That is exactly what happened during the\ndebugging session: the server startup log said \"Chat template loaded\"\n(because the initial detection succeeded), but every request actually\nstill fell through to the manual fallback because the runtime\nTypeError was never caught and reported — as a result the model's\nanswers for precisionextraction cases were completely wrong, and it\ntook several rounds of debugging to realize the root cause was not model\nquantization but a prompt format that had been wrong from the start."
+ },
+ {
+  "id": "c110",
+  "file": "iniz-agent-guard/references/tokenizer-signature-pitfall.md",
+  "heading": "Path 1: the builtin openvinogenai tokenizer (WITHOUT the tokenize= kwarg)",
+  "text": "Path 1: the builtin openvinogenai tokenizer (WITHOUT the tokenize= kwarg)\ntry:\n    tok = pipeline.gettokenizer()\n    if hasattr(tok, \"applychattemplate\"):\n        chattemplatefn = tok.applychattemplate\n        templatesource = \"openvinogenai tokenizer (builtin)\"\nexcept Exception as e:\n    print(f\"Builtin tokenizer path unavailable: {e}\")"
+ },
+ {
+  "id": "c111",
+  "file": "iniz-agent-guard/references/tokenizer-signature-pitfall.md",
+  "heading": "goes through the openvinogenai pipeline above.",
+  "text": "goes through the openvinogenai pipeline above.\nif chattemplatefn is None:\n    from transformers import AutoTokenizer\n    hftok = AutoTokenizer.frompretrained(MODELPATH)\n    chattemplatefn = hftok.applychattemplate\n    templatesource = \"transformers AutoTokenizer (fallback)\"\n\nprint(f\"Chat template loaded via: {templatesource}\")"
+ },
+ {
+  "id": "c112",
+  "file": "iniz-agent-guard/references/tokenizer-signature-pitfall.md",
+  "heading": "How to detect whether this is happening in your deployment",
+  "text": "How to detect whether this is happening in your deployment\nDo not trust the server startup log alone (\"chat template loaded\" can be\nmisleading if the initial detection succeeds but the runtime call still\nfails). Add perrequest logging that prints the final prompt actually\nsent to the model — if the format is the manual <role\\ncontent when\nit should be the official ChatML format\n(<imstartrole\\ncontent<imend), that is a sign the manual\nfallback is active even though the startup log says otherwise."
+ }
+]

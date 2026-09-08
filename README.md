@@ -54,12 +54,12 @@ p90 34.8 ms. End-to-end server: `_npu_ms` p50 35.4 ms, client round-trip 52 ms.
 |---|---|---|
 | **NPU** | `NPU` | **34.4 ms** |
 | CPU | `['CPU']` | ~94 ms |
-| iGPU (GPU.0) | `['GPU.0']` | ~105 ms |
+| iGPU (GPU.0) | `['GPU.0']` | 86.6 ms (seq 128) |
 
 The NPU is ~2.7× faster than the CPU for this workload.
 
-Evidence: `results/eval_final_seq128.json`, `results/npu_verify_int8.json`,
-`results/npu_proof_npuonly.json`.
+Evidence: `results/eval_final_seq128.json`, `results/eval_final_gpu0.json`,
+`results/npu_verify_int8.json`, `results/npu_proof_npuonly.json`.
 
 ### Proof of NPU execution (three layers)
 
@@ -213,7 +213,8 @@ returning 4xx.
   verbatim transcription without review.
 - **Translation still unvalidated** — `task=translate` was only run on English audio,
   where returning English tests nothing.
-- **`GPU.0` never benchmarked** in any language.
+- **iGPU slowest everywhere spot-checked**: EN base 329.6 ms (≈2× NPU/CPU, same
+  WER 0.0900), zh small 568.4 ms (1.9× NPU, same CER_trad 0.1622).
 - **No long-form audio** (longest 29.4 s) and **no streaming**.
 - The `taiwan-mandarin-stt` prior experience cited in the old roadmap **does not exist
   on this machine** — this was built from scratch.
@@ -229,14 +230,14 @@ extraction. Measured against ground truth, not eyeballed.
 
 ### The NPU is the wrong device for this, by 20×
 
-| Task | NPU p50 | CPU p50 | NPU penalty |
-|---|---|---|---|
-| summarize (120 tok) | 14181.6 ms | **704.9 ms** | **20.1× slower** |
-| sentiment (8 tok) | 1029.8 ms | **43.8 ms** | **23.5× slower** |
-| extract (40 tok) | 2726.3 ms | **119.4 ms** | **22.8× slower** |
+| Task | NPU p50 | CPU p50 | iGPU p50 | NPU penalty |
+|---|---|---|---|---|
+| summarize (120 tok) | 14181.6 ms | **704.9 ms** | — | **20.1× slower** |
+| sentiment (8 tok) | 1029.8 ms | **43.8 ms** | 89.8 ms | **23.5× slower** |
+| extract (40 tok) | 2726.3 ms | **119.4 ms** | — | **22.8× slower** |
 
 Accuracy is identical across devices (ROUGE-1 0.3179 NPU / 0.3218 CPU; sentiment
-0.9250 both). The NPU **is** executing it — adapter at **98.37 % mean**, proven with
+0.9250 on all three devices). The NPU **is** executing it — adapter at **98.37 % mean**, proven with
 LUID counters — it is just bad at autoregressive decode, where each token is a separate
 graph execution and a static-shape accelerator has nothing to amortize.
 
@@ -304,7 +305,8 @@ drafts.
 - **Only 12 summarization items** — wide error bars.
 - **No long-context test** (articles capped at 3500 chars), so "context compression"
   remains unproven.
-- **`GPU.0` never benchmarked**; **INT4 on CPU never benchmarked**.
+- **iGPU spot-checked on sentiment only** (89.8 ms, same 0.9250 — between CPU and
+  NPU); **INT4 on CPU never benchmarked**.
 - **No batching** — requests serialize under a lock.
 - The server binds to `127.0.0.1` **without authentication**; free-text input to a
   generative model should not be exposed without auth.
@@ -364,7 +366,8 @@ monolingual for a lot of cross-lingual.
 
 Device verdict flips with size (same pattern as Whisper): small runs faster on CPU
 (10.3 vs 15.2 ms/query), **base runs faster on NPU (25.5 vs 35.6 ms)** — so
-`mem_server.py` defaults to e5-base on NPU. r@3/r@5 are device-identical; r@1 ties
+`mem_server.py` defaults to e5-base on NPU. The iGPU ties the CPU (37.6 ms) with
+identical r@3 — measured, never the best device anywhere in this repo. r@3/r@5 are device-identical; r@1 ties
 flip on device numerics (22 vs 23), reported not hidden.
 
 The misses are near-misses: every gold chunk for the misses@3 ranks 4–9.

@@ -1,0 +1,295 @@
+{
+  "model": "qwen2.5-0.5b-instruct-int8-ov",
+  "device": "GPU.0",
+  "compile_ok": true,
+  "compile_s": 12.64,
+  "sentiment": {
+    "n": 40,
+    "accuracy": 0.925,
+    "correct": 37,
+    "unparsed": 0,
+    "p50_ms": 89.8,
+    "rows": [
+      {
+        "id": "sst2_00",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 102.1,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_01",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 81.5,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_02",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 87.5,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_03",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 85.9,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_04",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 82.7,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_05",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 85.6,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_06",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 82.6,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_07",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 83.3,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_08",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 84.7,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_09",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 95.0,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_10",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 85.2,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_11",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 92.1,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_12",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 84.7,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_13",
+        "gold": "positive",
+        "pred": "negative",
+        "ms": 88.7,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_14",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 89.3,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_15",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 88.6,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_16",
+        "gold": "positive",
+        "pred": "negative",
+        "ms": 84.5,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_17",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 99.2,
+        "output": "Positive"
+      },
+      {
+        "id": "sst2_18",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 83.0,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_19",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 85.7,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_20",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 97.6,
+        "output": "Negative"
+      },
+      {
+        "id": "sst2_21",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 88.8,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_22",
+        "gold": "negative",
+        "pred": "positive",
+        "ms": 86.0,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_23",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 93.7,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_24",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 96.3,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_25",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 104.0,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_26",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 98.9,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_27",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 100.6,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_28",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 83.7,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_29",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 90.5,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_30",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 105.3,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_31",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 100.1,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_32",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 95.5,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_33",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 103.2,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_34",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 97.2,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_35",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 94.7,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_36",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 91.8,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_37",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 88.4,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_38",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 90.3,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_39",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 93.0,
+        "output": "positive"
+      }
+    ]
+  }
+}

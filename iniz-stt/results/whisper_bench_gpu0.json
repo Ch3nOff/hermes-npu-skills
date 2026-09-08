@@ -1,0 +1,26 @@
+[
+  {
+    "device": "GPU.0",
+    "compile_ok": true,
+    "compile_s": 1.55,
+    "clips": 8,
+    "latency_p50_ms": 329.6,
+    "latency_p90_ms": 446.8,
+    "rtf_median": 0.038,
+    "rtf_mean": 0.0421,
+    "wer": 0.09,
+    "wer_errors": 18,
+    "wer_ref_words": 200,
+    "audio_seconds_total": 86.34,
+    "transcripts": [
+      "Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.",
+      "Nor is Mr. Quilter's manner less interesting than his matter.",
+      "He tells us that at this festive season of the year, with Christmas and roast beef looming before us, similarly is drawn from eating and its results occur most readily to the mind.",
+      "He has graved doubts whether Sir Frederick Layton's work is really Greek after all, and can discover in it but little of Rocky Ithaca.",
+      "Linnell's pictures are a sort of upgards and atom paintings, and Mason's exquisite ittles are as national as a jingo poem. Mr. Birkett Foster's landscapes smile at one much in the same way that Mr. Carker used to flash his teeth. And Mr. John Collier gives his sitter a cheerful slap on the back before he says like a shampooer in a Turkish bath. Next man,",
+      "It is obviously unnecessary for us to point out how luminous these criticisms are, how delicate in expression.",
+      "On the general principles of art, Mr. Krilter writes with equal lucidity.",
+      "Painting, he tells us, is of a different quality to mathematics, and finish in art is adding more factor."
+    ]
+  }
+]

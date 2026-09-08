@@ -45,15 +45,17 @@ of cross-lingual. **e5-base is the recommended model.**
 
 ### Device verdict depends on model size (same pattern as Whisper)
 
-| Model | Axis | NPU | CPU |
-|---|---|---|---|
-| e5-small | single query | 15.2 ms | **10.3 ms** |
-| e5-small | bulk index | 16.7 ms/chunk | **11.1 ms/chunk** |
-| **e5-base** | **single query** | **25.5 ms** | 35.6 ms |
-| **e5-base** | **bulk index (113)** | **27.2 ms/chunk** | 36.0 ms/chunk |
+| Model | Axis | NPU | CPU | iGPU (GPU.0) |
+|---|---|---|---|---|
+| e5-small | single query | 15.2 ms | **10.3 ms** | — |
+| e5-small | bulk index | 16.7 ms/chunk | **11.1 ms/chunk** | — |
+| **e5-base** | **single query** | **25.5 ms** | 35.6 ms | 37.6 ms |
+| **e5-base** | **bulk index (113)** | **27.2 ms/chunk** | 36.0 ms/chunk | — |
 
 At small size the NPU's fixed overhead dominates (CPU faster everywhere, batch=8
 helps CPU only). At base size the verdict flips: NPU 1.4× faster per query and bulk.
+The iGPU ties the CPU (37.6 vs 35.6 ms) with identical r@3 — never the best device
+anywhere in this repo so far.
 **`mem_server.py` therefore defaults to e5-base on NPU** (compile 9.7 s vs 0.9 s CPU
 — one-time cost, stated so nobody mistakes startup for a hang).
 
@@ -252,6 +254,7 @@ bug), and the client prints `VERDICT: PASS`.
 - `corpus/chunks.json`, `corpus/queries.json` — the measured corpus and query set
   (39 queries since the ID expansion)
 - `results/mem_bench_base.json` — e5-base per-query rows, splits, latency per device
+- `results/mem_bench_base_gpu0.json` — e5-base on iGPU (ties CPU, identical r@3)
 - `results/mem_bench_v2.json` — e5-small on the same 39 queries (the ladder's lower rung)
 - `results/mem_bench.json` — e5-small on the original 26 queries (superseded)
 - `results/rerank_base_CPU.json`, `results/rerank_CPU.json` — both rejected reranker runs

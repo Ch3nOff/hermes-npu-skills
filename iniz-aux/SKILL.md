@@ -40,6 +40,11 @@ verified with LUID counters — it is simply bad at autoregressive decode, where
 token is a separate graph execution and a static-shape accelerator has nothing to
 amortize.
 
+iGPU spot-check (sentiment only): `GPU.0` p50 **89.8 ms** at acc 0.9250 — 11.5× faster
+than the NPU but still 2× slower than the CPU. The speculation that the iGPU might
+beat both for decode is now measured and wrong for this task; summarize/extract on
+`GPU.0` remain unmeasured because nothing suggests a flip.
+
 **`aux_server.py` therefore defaults to `CPU`.** Use `INIZ_AUX_DEVICE=NPU` only to keep
 cores free (CPU 4.5 % vs 22.5 % during load) — never for latency.
 
@@ -289,7 +294,8 @@ generative model — do not expose it without auth.
 - **Only 12 summarization items.** ROUGE on 12 articles has wide error bars.
 - **No long-context test.** Articles were capped at 3500 chars; context compression on
   genuinely long input is untested.
-- **`GPU.0` never benchmarked** — the iGPU might beat both for decode.
+- **iGPU spot-checked on sentiment only** (89.8 ms — between CPU 43.8 and NPU
+  1029.8, same 0.9250); summarize/extract on `GPU.0` unmeasured.
 - **INT4 on CPU never benchmarked** (only INT4@NPU and INT8@CPU/NPU).
 - **No batching.** Frequent small calls are served one at a time under a lock.
 
@@ -311,6 +317,7 @@ with 0 hallucinations, `npu_active` true on NPU and false on CPU, and the client
 ## See Also
 
 - `results/aux_bench_*_{NPU,CPU}.json` — per-item outputs, ROUGE, accuracy, outcomes
+- `results/aux_bench_gpu0.json` — sentiment-only iGPU spot-check (89.8 ms, 0.9250)
 - `scripts/extract_filter.py`, `scripts/test_filter.py` — kind-specific post-filter
   (7/10 → 10/10 INT8@NPU) with the idempotence gate
 - `results/aux_bench_*_grounding.json` — extrinsic-entity audit

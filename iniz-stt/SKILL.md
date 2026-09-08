@@ -54,6 +54,9 @@ and both are correct: at `base` the NPU ties the CPU, at `small`/`medium` it win
 `medium` is the sweet spot: same `CER_trad` as `large-v3` at 2.5× the speed, and it
 actually runs on the NPU.
 
+iGPU spot-check on `small`: `GPU.0` p50 568.4 ms vs NPU 297.1 ms (compile 19.95 s),
+identical `CER_trad` 0.1622 — same story as English base, slower with equal quality.
+
 ---
 
 ## The headline result is a negative one — read this first
@@ -64,9 +67,10 @@ On this machine, **the NPU is not faster than the CPU for `whisper-base`** on En
 |---|---|---|---|---|---|---|
 | **NPU** | 0.66 s | **169.9 ms** | 232.5 ms | 0.0196 | 0.0900 | **7.5 % mean / 10.6 % max** |
 | **CPU** | 0.58 s | **167.8 ms** | 207.7 ms | 0.0189 | 0.0900 | 27.0 % mean / 49.2 % max |
+| iGPU (GPU.0) | 1.55 s | 329.6 ms | 446.8 ms | 0.038 | 0.0900 | not measured |
 
-Same 8 LibriSpeech clips (86.34 s of audio), same 18/200 word errors, and
-**8/8 normalized transcripts identical** between devices.
+Same 8 LibriSpeech clips (86.34 s of audio), same 18/200 word errors on all three
+devices, and **8/8 normalized transcripts identical** between devices.
 
 The NPU wins on **CPU offload, not speed**: 7.5 % versus 27.0 % mean CPU while
 transcribing. That is the actual reason to deploy this — transcription that does not
@@ -321,8 +325,10 @@ Measured over HTTP on the NPU: `compile 1.01 s`, `warmup 151.2 ms`,
    (uppercase, strip punctuation, collapse spaces) before scoring. WER 0.09 vs 0.80
    is entirely this.
 
-5. **`GPU.0` was never benchmarked.** Only NPU and CPU are measured here. The iGPU
-   column is absent, not zero.
+5. **iGPU spot-check: slowest everywhere.** `GPU.0` on English base: compile 1.55 s,
+   p50 329.6 ms (≈2× NPU/CPU, identical WER). On zh small: p50 568.4 ms vs NPU
+   297.1 ms (1.9× slower, identical CER_trad 0.1622). The iGPU column exists and
+   loses; remaining sizes unmeasured because nothing suggests a flip.
 
 6. **`task=translate` on English audio returns English.** Not a bug — verified
    working, but it proves nothing about translation quality. Cross-language
@@ -380,7 +386,8 @@ Measured over HTTP on the NPU: `compile 1.01 s`, `warmup 151.2 ms`,
   where it correctly returns English — that tests nothing.
 - **No long-form audio.** Longest clip anywhere is 29.4 s (English). Whisper's 30 s
   window means chunking past that is unverified.
-- **`GPU.0` never benchmarked** in any language.
+- **iGPU slowest everywhere spot-checked** (EN base 2×, zh small 1.9× slower than
+  NPU, identical quality); remaining sizes unmeasured.
 - **No streaming / partial results.** Requests are whole-file only.
 - **`CER_trad` 0.0811 is roughly 1 wrong character in 12.** Good enough for search or
   rough notes, not for verbatim transcription without review.
@@ -413,7 +420,9 @@ WER ≤ 0.10 with 8/8 transcript agreement, Chinese `CER_trad` ≤ 0.10 on
 ## See Also
 
 - `results/whisper_bench.json` — English per-device latency, RTF, WER, transcripts
+- `results/whisper_bench_gpu0.json` — English base on iGPU (slowest, same WER)
 - `results/whisper_bench_zhtw{,_small,_medium}.json` — Chinese CER per model/device
+- `results/whisper_bench_zhtw_small_gpu0.json` — zh small on iGPU (same CER)
 - `results/whisper_bench_zhtw_large_cpu.json` — `large-v3`, CPU only (NPU failed)
 - `results/prompt_fair_CPU_whisper-small-int8-ov.json` — prompt/hotwords experiment
   with leak check and wrong-domain control

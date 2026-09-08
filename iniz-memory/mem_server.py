@@ -4,18 +4,20 @@ mem_server.py — Iniz Memory (local semantic search over the repo docs, on CPU/
 Same process shape as stt_server.py: load models once, serve many requests,
 lock-guarded inference, /health with real counters.
 
-DEVICE DEFAULT IS CPU, DELIBERATELY. Measured on e5-small INT8, seq_len=256:
-  single query embed: CPU 10.3ms vs NPU 15.2ms  (CPU 1.5x faster)
-  bulk index:         CPU 9.9ms/chunk vs NPU 17.8ms/chunk (batch=8 helps CPU,
-                      does nothing for NPU — larger static shape, same speed)
-Same INT8 weights both sides (26/26 top1 agreement), so this is purely a latency
-verdict, not quality. NPU remains an option (INIZ_MEM_DEVICE=NPU) for CPU offload,
-same argument as whisper-base.
+DEVICE DEFAULT IS NPU. Measured on e5-base INT8 (293 MB), seq_len=256, 39 queries:
+  single query embed: NPU 25.5ms vs CPU 35.6ms  (NPU 1.4x faster)
+  bulk index (113 chunks): NPU 27.2ms/chunk vs CPU 36.0ms/chunk
+Recall is device-identical at r@3/r@5 (0.846/0.923 both); r@1 ties flip on device
+numerics (22 vs 23 hits) — reported, not hidden. The smaller e5-small showed the
+opposite verdict (CPU faster everywhere), so this is a size effect, same pattern as
+Whisper: the NPU's fixed overhead amortizes as the model grows. CPU remains an
+option (INIZ_MEM_DEVICE=CPU) with a 0.86s compile vs 9.7s.
 
-NO RERANKER — measured, then rejected. mMiniLM cross-encoder over top-10 moved
-recall@1 0.615 -> 0.577 on the 26-query set (fixed 2, broke 3) at ~232ms/query,
-20x the bi-encoder query cost. On a corpus full of cross-referencing sibling
-sections it adds noise, not signal. See test_rerank.py + rerank_CPU.json.
+NO RERANKER — measured twice, rejected twice. mMiniLM cross-encoder over top-10:
+on e5-small, recall@1 0.615 -> 0.577 (fixed 2, broke 3); on e5-base, 0.590 -> 0.590
+(fixed 3, broke 3, net zero) — both at ~230ms/query, 20x the bi-encoder cost. On a
+corpus of cross-referencing sibling sections it adds noise, not signal. See
+test_rerank.py + rerank_CPU.json.
 
 API:
   GET  /health
@@ -41,10 +43,21 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 MODEL_DIR = Path(os.environ.get(
-    "INIZ_MEM_MODEL", str(HERE.parent / "models" / "e5-small-int8-ov")))
-CORPUS = Path(os.environ.get(
-    "INIZ_MEM_CORPUS", str(HERE / "corpus" / "chunks.json")))
-DEVICE = os.environ.get("INIZ_MEM_DEVICE", "CPU")
+    "INIZ_MEM_MODEL", str(HERE.parent / "models" / "e5-base-int8-ov")))
+# Corpus resolution order: explicit env -> corpus/ next to the server (repo
+# skill layout) -> ../work/corpus/chunks.json (dev runtime layout). Anything
+# else must set INIZ_MEM_CORPUS; guessing further would hide config errors.
+_candidates = [Path(os.environ["INIZ_MEM_CORPUS"])] \
+    if os.environ.get("INIZ_MEM_CORPUS") else []
+_candidates += [HERE / "corpus" / "chunks.json",
+                HERE.parent / "work" / "corpus" / "chunks.json"]
+CORPUS = next((p for p in _candidates if p.exists()), None)
+if CORPUS is None:
+    raise FileNotFoundError(
+        "chunks.json not found in " +
+        ", ".join(str(p) for p in _candidates) +
+        " — set INIZ_MEM_CORPUS explicitly.")
+DEVICE = os.environ.get("INIZ_MEM_DEVICE", "NPU")
 PORT = int(os.environ.get("INIZ_MEM_PORT", "8012"))
 SEQ_LEN = 256
 
@@ -62,9 +75,15 @@ class Engine:
             raise RuntimeError(
                 f"device {device} not available. present: {core.available_devices}")
         model = core.read_model(str(model_dir / "openvino_model.xml"))
-        model.reshape({"input_ids": [1, SEQ_LEN],
-                       "attention_mask": [1, SEQ_LEN],
-                       "token_type_ids": [1, SEQ_LEN]})
+        # e5-small IR has token_type_ids, e5-base IR does not — reshape/feed
+        # only the inputs the IR actually declares.
+        in_names = {i.get_any_name() for i in model.inputs}
+        shape_map = {"input_ids": [1, SEQ_LEN],
+                     "attention_mask": [1, SEQ_LEN]}
+        if "token_type_ids" in in_names:
+            shape_map["token_type_ids"] = [1, SEQ_LEN]
+        model.reshape(shape_map)
+        self._has_token_type = "token_type_ids" in in_names
         print(f"[mem] compiling {model_dir.name} -> {device} ...", flush=True)
         t0 = time.time()
         self.compiled = core.compile_model(model, device)
@@ -98,8 +117,9 @@ class Engine:
                            padding="max_length", truncation=True,
                            max_length=SEQ_LEN)
             feed = {"input_ids": enc["input_ids"].astype(np.int64),
-                    "attention_mask": enc["attention_mask"].astype(np.int64),
-                    "token_type_ids": np.zeros_like(enc["input_ids"])}
+                    "attention_mask": enc["attention_mask"].astype(np.int64)}
+            if self._has_token_type:
+                feed["token_type_ids"] = np.zeros_like(enc["input_ids"])
             h = next(iter(self.compiled(feed).values()))
             mask = enc["attention_mask"][0]
             v = (h[0] * mask[:, None]).sum(0) / mask.sum()

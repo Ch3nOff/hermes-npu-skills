@@ -39,9 +39,12 @@ def build_engine(model_dir, device):
 
     core = ov.Core()
     model = core.read_model(str(Path(model_dir) / "openvino_model.xml"))
-    model.reshape({"input_ids": [1, SEQ_LEN],
-                   "attention_mask": [1, SEQ_LEN],
-                   "token_type_ids": [1, SEQ_LEN]})
+    in_names = {i.get_any_name() for i in model.inputs}
+    # e5-small IR has token_type_ids, e5-base IR does not — feed what exists
+    shape_map = {"input_ids": [1, SEQ_LEN], "attention_mask": [1, SEQ_LEN]}
+    if "token_type_ids" in in_names:
+        shape_map["token_type_ids"] = [1, SEQ_LEN]
+    model.reshape(shape_map)
     compiled = core.compile_model(model, device)
     tok = AutoTokenizer.from_pretrained(str(model_dir), local_files_only=True)
 
@@ -52,9 +55,11 @@ def build_engine(model_dir, device):
                       truncation=True, max_length=SEQ_LEN)
             feed = {k: enc[k].astype(np.int64)
                     for k in ("input_ids", "attention_mask")}
-            # the IR has a token_type_ids input but the tokenizer does not emit
-            # it; all zeros is correct (single segment, no sentence pair)
-            feed["token_type_ids"] = np.zeros_like(feed["input_ids"])
+            # the e5-small IR has a token_type_ids input but its tokenizer does
+            # not emit it; all zeros is correct (single segment, no pair).
+            # e5-base IR has no such input at all — feed what exists.
+            if "token_type_ids" in in_names:
+                feed["token_type_ids"] = np.zeros_like(feed["input_ids"])
             out = compiled(feed)
             h = next(iter(out.values()))
             mask = enc["attention_mask"][0]

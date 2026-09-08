@@ -347,44 +347,45 @@ printing them.
 
 ## ✅ Iniz Memory — local semantic search over these docs
 
-`multilingual-e5-small` INT8 (118 MB) embedded the repo's own 8 markdown files (113
-chunks), ranked by cosine similarity against 26 hand-written queries (20 English + 6
+`multilingual-e5-base` INT8 (293 MB) embedded the repo's own 8 markdown files (113
+chunks), ranked by cosine similarity against 39 hand-written queries (20 English + 19
 Indonesian, including cross-lingual ID queries over English chunks):
 
 | Split | n | recall@1 | recall@3 | recall@5 |
 |---|---|---|---|---|
-| overall | 26 | 0.615 | 0.808 | 0.962 |
-| monolingual EN | 20 | 0.650 | 0.900 | 1.000 |
-| cross-lingual ID | 6 | 0.500 | 0.500 | 0.833 |
+| overall | 39 | 0.590 | 0.846 | 0.923 |
+| monolingual EN | 20 | 0.650 | 0.850 | 0.950 |
+| cross-lingual ID | 19 | 0.526 | 0.842 | 0.895 |
 
-Same weights both devices (26/26 top-1 agreement), so the device verdict is pure
-latency — and **CPU wins it**: 10.3 ms vs 15.2 ms per query, 9.9 vs 17.8 ms/chunk
-bulk (batch=8 helps CPU, does nothing for NPU). `mem_server.py` defaults to CPU; NPU
-stays an offload option. At this model size the NPU's fixed overhead dominates —
-same shape as the whisper-base verdict, possibly flipping for larger embedding models
-(untested, stated as untested).
+The smaller e5-small scored 0.795 overall / 0.684 ID on the same 39 queries — base
+buys +0.051 overall and +0.158 cross-lingual at ~3× the per-query latency (still
+trivial: 25–36 ms). EN drops a hair (0.900 → 0.850); the ladder trades a little
+monolingual for a lot of cross-lingual.
 
-The misses are near-misses: every gold chunk for the 5 misses@3 ranks 4–9.
+Device verdict flips with size (same pattern as Whisper): small runs faster on CPU
+(10.3 vs 15.2 ms/query), **base runs faster on NPU (25.5 vs 35.6 ms)** — so
+`mem_server.py` defaults to e5-base on NPU. r@3/r@5 are device-identical; r@1 ties
+flip on device numerics (22 vs 23), reported not hidden.
 
-### Reranker measured, then rejected
+The misses are near-misses: every gold chunk for the misses@3 ranks 4–9.
 
-`mMiniLM` cross-encoder (multilingual, covers Indonesian) over top-10 moved recall@1
-**0.615 → 0.577** — fixed 2, broke 3 previously correct answers — at ~232 ms/query,
-20× the bi-encoder cost. On a corpus of cross-referencing sibling sections it adds
-noise, not signal. Not shipped; the negative result is preserved in
-`results/rerank_CPU.json`.
+### Reranker measured twice, rejected twice
+
+`mMiniLM` cross-encoder over top-10: r@1 0.615 → 0.577 on small (fixed 2, broke 3),
+**0.590 → 0.590 on base (fixed 3, broke 3, net zero)** — both at ~230 ms/query, 20×
+the bi-encoder cost. Not shipped; both negative results preserved
+(`results/rerank_CPU.json`, `results/rerank_base_CPU.json`).
 
 ### Honest limitations
 
-- **26 hand-written queries, same author as the gold labels.** Phrasing bias is
-  unavoidable; the ID split (n=6) is a smoke signal with wide bars.
+- **39 hand-written queries, same author as the gold labels.** Phrasing bias is
+  unavoidable; ID at n=19 is quotable with its n attached.
 - **The Obsidian vault is missing** (`Clevates-m` registered but absent from disk).
   Built on repo docs per explicit user choice; re-point `build_corpus.py` when the
   vault reappears.
 - **No incremental indexing** (full re-embed at startup), **no BM25 hybrid** for
   exact terms, **heading-based chunking** can split table context.
-- **Larger embedding models untested** — the CPU verdict may not hold at `bge-m3`
-  size.
+- **`bge-m3` untested** — next trigger would be ID lagging again at larger n.
 
 ---
 
@@ -578,11 +579,11 @@ changes single numbers into ranges.
 For local semantic search over these docs:
 
 ```bash
-optimum-cli export openvino --model intfloat/multilingual-e5-small \
-  --task feature-extraction --weight-format int8 models/e5-small-int8-ov
+optimum-cli export openvino --model intfloat/multilingual-e5-base \
+  --task feature-extraction --weight-format int8 models/e5-base-int8-ov
 python iniz-memory/scripts/build_corpus.py       # chunk the docs
 python iniz-memory/scripts/bench_mem.py --devices NPU,CPU
-INIZ_MEM_DEVICE=CPU python iniz-memory/mem_server.py
+python iniz-memory/mem_server.py
 python iniz-memory/scripts/mem_client.py
 ```
 

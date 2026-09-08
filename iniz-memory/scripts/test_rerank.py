@@ -12,6 +12,8 @@ not "state of the art".
 """
 
 import json
+import os
+import re
 import statistics
 import sys
 import time
@@ -24,6 +26,8 @@ from bench_mem import load_all, build_engine, SEQ_LEN
 RERANK_MODEL = "../models/mmMiniLM-reranker-int8-ov"
 RERANK_SEQ = 384
 TOPK = 10
+BI_MODEL = os.environ.get("INIZ_RERANK_BI_MODEL",
+                           "../models/e5-small-int8-ov")
 
 
 def build_reranker(device):
@@ -57,7 +61,7 @@ def main():
     texts = [c["text"] for c in chunks]
     ids = [c["id"] for c in chunks]
 
-    _, embed = build_engine("../models/e5-small-int8-ov",
+    _, embed = build_engine(BI_MODEL,
                             "CPU")  # bi-encoder: device-independent recall
     C = np.stack(embed(texts, "passage: "))
 

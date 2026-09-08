@@ -1,13 +1,15 @@
 """
 mem_client.py — end-to-end smoke test for mem_server.py over real HTTP.
 
-Replays all 26 hand-written queries through the server and recomputes recall@1/3/5
-from the HTTP responses, so the served numbers are checked against the offline
-benchmark (r@1=0.615, r@3=0.808, r@5=0.962) rather than taken on faith. Also
-exercises error handling: empty body, missing query, bad top_k, unknown endpoint.
+Replays all 39 hand-written queries through the server and recomputes recall@1/3/5
+from the HTTP responses. r@3/r@5 are device-stable (33/39 and 36/39 on both NPU
+and CPU); r@1 ties flip on device numerics (22 NPU vs 23 CPU), so r@1 is accepted
+in {22, 23} rather than exactly. Error handling: empty body, missing query, bad
+top_k, unknown endpoint.
 """
 
 import json
+import os
 import statistics
 import sys
 import urllib.error
@@ -16,6 +18,13 @@ from pathlib import Path
 
 BASE = "http://127.0.0.1:8012"
 WORK = Path(__file__).resolve().parent
+# queries.json lives in corpus/ next to scripts/ (repo layout) or in corpus/
+# next to this file (dev work/ layout) — same resolution story as the server.
+_qc = [WORK / "corpus" / "queries.json", WORK.parent / "corpus" / "queries.json",
+        Path(os.environ["INIZ_MEM_QUERIES"]) if os.environ.get("INIZ_MEM_QUERIES") else None]
+QUERIES = next((p for p in _qc if p is not None and p.exists()), None)
+if QUERIES is None:
+    raise FileNotFoundError("queries.json not found — set INIZ_MEM_QUERIES.")
 
 
 def get(path):
@@ -37,9 +46,8 @@ def main():
     for k, v in h.items():
         print(f"  {k}: {v}")
 
-    queries = json.loads((WORK / "corpus" / "queries.json").read_text(
-        encoding="utf-8"))
-    print(f"\n=== POST /search ({len(queries)} queries) ===")
+    queries = json.loads(QUERIES.read_text(encoding="utf-8"))
+    print(f"\n=== POST /search ({len(queries)} queries from {QUERIES}) ===")
     r1 = r3 = r5 = 0
     lat = []
     for q in queries:
@@ -58,10 +66,10 @@ def main():
 
     n = len(queries)
     print(f"\n  served recall: r@1={r1/n:.4f} r@3={r3/n:.4f} r@5={r5/n:.4f} "
-          f"(offline: 0.6154 / 0.8077 / 0.9615)")
+          f"(offline e5-base: r@3=33/39 r@5=36/39 both devices; r@1 22-23)")
     print(f"  server latency p50={statistics.median(lat):.1f}ms")
-    match = (r1, r3, r5) == (16, 21, 25)
-    print(f"  matches offline bench exactly: {match}")
+    match = (r3, r5) == (33, 36) and r1 in (22, 23)
+    print(f"  matches offline bench: {match}")
 
     print("\n=== error handling ===")
     checks = []

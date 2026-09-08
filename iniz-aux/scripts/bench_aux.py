@@ -21,12 +21,20 @@ text, which is all that is needed for a relative comparison.
 
 import argparse
 import json
+import os
 import re
 import statistics
 import time
 from pathlib import Path
 
-DATA = Path("aux_data")
+# Same resolution story as aux_client.py: fetched data, env wins, cwd default.
+_cands = ([Path(os.environ["INIZ_AUX_DATA"])]
+          if os.environ.get("INIZ_AUX_DATA") else []) + [Path("aux_data")]
+DATA = next((p for p in _cands if p.exists()), None)
+if DATA is None:
+    raise FileNotFoundError(
+        "aux_data/ not found — run scripts/fetch_aux_data.py from "
+        "~/npu-provider/work/ or set INIZ_AUX_DATA.")
 REFUSAL_MARKERS = [
     "i cannot", "i can't", "cannot determine", "not mentioned", "no filename",
     "unable to", "i'm sorry", "sorry,", "as an ai", "there is no",

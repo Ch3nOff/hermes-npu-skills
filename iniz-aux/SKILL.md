@@ -184,7 +184,8 @@ unreviewed.
    terminal(command="$V -u scripts/fetch_aux_data.py")
    ```
    Reads CNN/DailyMail and SST-2 parquet directly with `pyarrow` — `datasets` is not
-   required.
+   required. Data is fetched, not committed: scripts resolve `INIZ_AUX_DATA` env
+   first, then `./aux_data` (run them from `~/npu-provider/work/`).
 
 2. **Benchmark each quantization on the NPU.** Completion: `aux_bench_*.json` per
    model with ROUGE, accuracy, and an extraction outcome breakdown.

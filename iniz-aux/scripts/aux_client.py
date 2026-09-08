@@ -9,6 +9,7 @@ question on /extract, unknown endpoint.
 """
 
 import json
+import os
 import statistics
 import sys
 import urllib.error
@@ -16,7 +17,15 @@ import urllib.request
 from pathlib import Path
 
 BASE = "http://127.0.0.1:8011"
-DATA = Path("aux_data")
+# aux_data/ is fetched, not committed: it lives in ~/npu-provider/work/aux_data
+# (dev layout). Explicit env wins, cwd is the legacy default (run from work/).
+_cands = ([Path(os.environ["INIZ_AUX_DATA"])]
+          if os.environ.get("INIZ_AUX_DATA") else []) + [Path("aux_data")]
+DATA = next((p for p in _cands if p.exists()), None)
+if DATA is None:
+    raise FileNotFoundError(
+        "aux_data/ not found — run scripts/fetch_aux_data.py from "
+        "~/npu-provider/work/ or set INIZ_AUX_DATA.")
 
 
 def get(path):

@@ -19,11 +19,14 @@ Output: aux_data/{summarize,sentiment,extract}.json
 """
 
 import json
+import os
 import sys
 import urllib.request
 from pathlib import Path
 
-OUT = Path("aux_data")
+# Fetch target: explicit env wins, otherwise ./aux_data (run from work/).
+OUT = (Path(os.environ["INIZ_AUX_DATA"])
+       if os.environ.get("INIZ_AUX_DATA") else Path("aux_data"))
 CNN_URL = ("https://huggingface.co/datasets/abisee/cnn_dailymail/resolve/main/"
            "3.0.0/test-00000-of-00001.parquet")
 SST2_URL = ("https://huggingface.co/datasets/stanfordnlp/sst2/resolve/main/"

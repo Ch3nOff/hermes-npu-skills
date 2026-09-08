@@ -279,6 +279,7 @@ decoding:
 | INT8 | NPU | 0.3179 | 0.1299 | 0.2321 | **0.9250** | 7/10 raw, **10/10** filtered |
 | INT4 | NPU | 0.3155 | 0.1041 | 0.2425 | 0.9000 | 6/10 raw, **9/10** filtered |
 | INT8 | CPU | 0.3218 | 0.1336 | 0.2404 | **0.9250** | 6/10 raw, **9/10** filtered |
+| INT4 | CPU | 0.3198 | 0.1122 | 0.2368 | 0.9000 | 6/10 raw, **9/10** filtered |
 
 **Sentiment is the one to actually deploy:** 0.9250 accuracy, 0 unparsed outputs across
 40 items, 43.8 ms on CPU. INT4 is 4.2× faster than INT8 on NPU for ~equal ROUGE-1, but
@@ -306,7 +307,8 @@ drafts.
 - **No long-context test** (articles capped at 3500 chars), so "context compression"
   remains unproven.
 - **iGPU spot-checked on sentiment only** (89.8 ms, same 0.9250 — between CPU and
-  NPU); **INT4 on CPU never benchmarked**.
+  NPU); **quantization × device matrix complete** (INT4@CPU: same quality as
+  INT4@NPU, 9/10 filtered).
 - **No batching** — requests serialize under a lock.
 - The server binds to `127.0.0.1` **without authentication**; free-text input to a
   generative model should not be exposed without auth.

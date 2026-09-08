@@ -1,0 +1,501 @@
+{
+  "model": "qwen2.5-0.5b-instruct-int4-ov",
+  "device": "CPU",
+  "compile_ok": true,
+  "compile_s": 1.35,
+  "summarize": {
+    "n": 12,
+    "rouge1": 0.3198,
+    "rouge2": 0.1122,
+    "rougeL": 0.2368,
+    "p50_ms": 616.5,
+    "rows": [
+      {
+        "id": "cnn_00",
+        "rouge1": 0.4444,
+        "rouge2": 0.1429,
+        "rougeL": 0.3056,
+        "ms": 1148.1,
+        "output": "A dog with a friendly white-and-black mix named Theia, who was hit by a car and survived, was found alive in a neighbor's yard and received medical treatment."
+      },
+      {
+        "id": "cnn_01",
+        "rouge1": 0.2892,
+        "rouge2": 0.0247,
+        "rougeL": 0.2169,
+        "ms": 614.8,
+        "output": "Five Americans who were monitored for three weeks at an Omaha, Nebraska, hospital after being exposed to Ebola in West Africa have been released, a Nebraska Medicine spokesman said in an email Wednesday. One of the others has already gone home."
+      },
+      {
+        "id": "cnn_02",
+        "rouge1": 0.4,
+        "rouge2": 0.1587,
+        "rougeL": 0.3077,
+        "ms": 552.0,
+        "output": "A Duke student has admitted to hanging a noose made of rope from a tree near a student union, university officials said Thursday."
+      },
+      {
+        "id": "cnn_03",
+        "rouge1": 0.1429,
+        "rouge2": 0.05,
+        "rougeL": 0.0952,
+        "ms": 592.2,
+        "output": "Trey and Ellie are both high school seniors who are planning to attend proms and pursue different interests."
+      },
+      {
+        "id": "cnn_04",
+        "rouge1": 0.2192,
+        "rouge2": 0.0282,
+        "rougeL": 0.1096,
+        "ms": 703.6,
+        "output": "A man named Andrew Getty, who was a grandson of the famous oil tycoon J. Paul Getty, died of natural causes. His family, including his grandfather, are not in any trouble."
+      },
+      {
+        "id": "cnn_05",
+        "rouge1": 0.2745,
+        "rouge2": 0.0816,
+        "rougeL": 0.1569,
+        "ms": 618.2,
+        "output": "Filipinos are being warned to be on guard for flash floods and landslides as tropical storm Maysak approaches the Asian island nation of the Philippines."
+      },
+      {
+        "id": "cnn_06",
+        "rouge1": 0.5263,
+        "rouge2": 0.3333,
+        "rougeL": 0.5263,
+        "ms": 442.1,
+        "output": "Bob Barker, who hosted \"The Price Is Right\" for 35 years, stepped down as the show's host in 2007."
+      },
+      {
+        "id": "cnn_07",
+        "rouge1": 0.4528,
+        "rouge2": 0.2353,
+        "rougeL": 0.2642,
+        "ms": 376.2,
+        "output": "A 19-year-old man from UK was charged with terror offenses after being arrested in Britain on a flight from Turkey."
+      },
+      {
+        "id": "cnn_08",
+        "rouge1": 0.2759,
+        "rouge2": 0.0714,
+        "rougeL": 0.2069,
+        "ms": 885.2,
+        "output": "Paul Walker, the actor who died in 2013, was a \"fast and furious\" star who died in a car accident. He was a \"fast and furious\" star who died in a car accident."
+      },
+      {
+        "id": "cnn_09",
+        "rouge1": 0.3548,
+        "rouge2": 0.0667,
+        "rougeL": 0.2903,
+        "ms": 773.4,
+        "output": "The Anne Frank House researchers concluded that Anne Frank and Margot Frank probably did not survive to March 1945, contradicting the date of death which had previously been determined by Dutch authorities."
+      },
+      {
+        "id": "cnn_10",
+        "rouge1": 0.1714,
+        "rouge2": 0.1212,
+        "rougeL": 0.1714,
+        "ms": 545.1,
+        "output": "In 1969, guitar player Jimi Hendrix wrote \"The Star-Spangled Banner\" with his psychedelic take on the national anthem."
+      },
+      {
+        "id": "cnn_11",
+        "rouge1": 0.2857,
+        "rouge2": 0.0328,
+        "rougeL": 0.1905,
+        "ms": 738.6,
+        "output": "In a Facebook post, Republican and former representative Michele Bachmann criticized President Obama for his handling of the Iran nuclear deal, accusing him of being \"condescending\" and \"laughing at her.\""
+      }
+    ]
+  },
+  "sentiment": {
+    "n": 40,
+    "accuracy": 0.9,
+    "correct": 36,
+    "unparsed": 0,
+    "p50_ms": 63.8,
+    "rows": [
+      {
+        "id": "sst2_00",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 75.4,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_01",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 54.7,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_02",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 62.6,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_03",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 64.1,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_04",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 54.1,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_05",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 64.1,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_06",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 52.4,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_07",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 65.7,
+        "output": "Negative."
+      },
+      {
+        "id": "sst2_08",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 61.0,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_09",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 74.7,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_10",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 61.0,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_11",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 72.1,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_12",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 61.5,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_13",
+        "gold": "positive",
+        "pred": "negative",
+        "ms": 63.9,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_14",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 66.6,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_15",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 65.3,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_16",
+        "gold": "positive",
+        "pred": "negative",
+        "ms": 58.9,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_17",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 92.2,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_18",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 52.0,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_19",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 58.6,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_20",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 71.4,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_21",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 58.0,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_22",
+        "gold": "negative",
+        "pred": "positive",
+        "ms": 53.6,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_23",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 57.4,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_24",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 60.4,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_25",
+        "gold": "negative",
+        "pred": "positive",
+        "ms": 70.6,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_26",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 68.6,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_27",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 63.7,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_28",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 58.4,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_29",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 55.7,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_30",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 72.4,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_31",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 70.0,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_32",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 54.9,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_33",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 74.2,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_34",
+        "gold": "negative",
+        "pred": "negative",
+        "ms": 64.2,
+        "output": "negative"
+      },
+      {
+        "id": "sst2_35",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 67.8,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_36",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 64.9,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_37",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 58.5,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_38",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 59.8,
+        "output": "positive"
+      },
+      {
+        "id": "sst2_39",
+        "gold": "positive",
+        "pred": "positive",
+        "ms": 65.4,
+        "output": "positive"
+      }
+    ]
+  },
+  "extract": {
+    "n": 10,
+    "exact": 6,
+    "exact_rate": 0.6,
+    "refusal": 0,
+    "hallucination": 0,
+    "wrong_span": 4,
+    "p50_ms": 125.4,
+    "rows": [
+      {
+        "id": "ext_00",
+        "kind": "filename",
+        "gold": "data_loader_v2.py",
+        "parsed": "config",
+        "outcome": "wrong_span",
+        "ms": 114.6,
+        "output": "config."
+      },
+      {
+        "id": "ext_01",
+        "kind": "version",
+        "gold": "4.11.2",
+        "parsed": "4.11.2",
+        "outcome": "exact",
+        "ms": 133.9,
+        "output": "4.11.2"
+      },
+      {
+        "id": "ext_02",
+        "kind": "path",
+        "gold": "/var/backups/nightly/2026-03-14.tar.gz",
+        "parsed": "/var/backups/nightly/2026-03-14.tar.gz",
+        "outcome": "exact",
+        "ms": 264.8,
+        "output": "/var/backups/nightly/2026-03-14.tar.gz"
+      },
+      {
+        "id": "ext_03",
+        "kind": "email",
+        "gold": "maria.gonzalez@example.org",
+        "parsed": "maria.gonzalez@example.org",
+        "outcome": "exact",
+        "ms": 149.0,
+        "output": "maria.gonzalez@example.org"
+      },
+      {
+        "id": "ext_04",
+        "kind": "path",
+        "gold": "scripts/migrate_users_0042.sql",
+        "parsed": "scripts/migrate_users_0042.sql",
+        "outcome": "exact",
+        "ms": 145.1,
+        "output": "scripts/migrate_users_0042.sql"
+      },
+      {
+        "id": "ext_05",
+        "kind": "identifier",
+        "gold": "evt_1Nx8Kd2eZvKYlo2C",
+        "parsed": "secret",
+        "outcome": "wrong_span",
+        "ms": 88.6,
+        "output": "secret"
+      },
+      {
+        "id": "ext_06",
+        "kind": "version",
+        "gold": "2.9.1",
+        "parsed": "torch==2.9.1",
+        "outcome": "wrong_span",
+        "ms": 116.9,
+        "output": "torch==2.9.1"
+      },
+      {
+        "id": "ext_07",
+        "kind": "filename",
+        "gold": "app-2026-03-14.log.gz",
+        "parsed": "app-2026-03-14.log.gz",
+        "outcome": "exact",
+        "ms": 178.2,
+        "output": "app-2026-03-14.log.gz"
+      },
+      {
+        "id": "ext_08",
+        "kind": "identifier",
+        "gold": "9f4c2ab",
+        "parsed": "9f4c2ab",
+        "outcome": "exact",
+        "ms": 109.4,
+        "output": "9f4c2ab"
+      },
+      {
+        "id": "ext_09",
+        "kind": "path",
+        "gold": "s3://prod-media-eu-west-1/thumbnails/",
+        "parsed": "prod-media-eu-west-1",
+        "outcome": "wrong_span",
+        "ms": 112.0,
+        "output": "prod-media-eu-west-1"
+      }
+    ]
+  }
+}

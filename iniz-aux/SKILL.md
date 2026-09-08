@@ -126,6 +126,13 @@ sentences; 10 extraction items. Greedy decoding (`do_sample=False`) so numbers r
 | INT8 | NPU | 0.3179 | 0.1299 | 0.2321 | **0.9250** | 7/10 |
 | INT4 | NPU | 0.3155 | 0.1041 | 0.2425 | 0.9000 | 6/10 |
 | INT8 | CPU | 0.3218 | 0.1336 | 0.2404 | **0.9250** | 6/10 |
+| INT4 | CPU | 0.3198 | 0.1122 | 0.2368 | 0.9000 | 6/10 raw, **9/10** filtered |
+
+INT4@CPU completes the matrix: quality is device-independent (same 0.9000 sentiment
+and 6/10 raw extract as INT4@NPU; ROUGE-1 within 0.005), latency is not (summarize
+p50 616.5 ms CPU vs 14181.6 ms NPU). The filter lifts INT4@CPU to 9/10 with the
+idempotence gate passing — the one remaining miss (`config.`) is the documented
+no-anchor limit. Evidence: `results/aux_bench_int4_CPU.json`.
 
 **Sentiment is the standout: 0.9250 with 0 unparsed outputs across 40 items.** It is
 cheap (8 tokens), the output space is two words, and it needs no post-processing. If
@@ -303,7 +310,9 @@ generative model — do not expose it without auth.
   genuinely long input is untested.
 - **iGPU spot-checked on sentiment only** (89.8 ms — between CPU 43.8 and NPU
   1029.8, same 0.9250); summarize/extract on `GPU.0` unmeasured.
-- **INT4 on CPU never benchmarked** (only INT4@NPU and INT8@CPU/NPU).
+- **Quantization × device matrix complete** (INT4@CPU was the last cell: same
+  quality as INT4@NPU, 9/10 filtered). Remaining iGPU gaps (summarize/extract on
+  `GPU.0`) stay unmeasured — nothing suggests a flip.
 - **No batching.** Frequent small calls are served one at a time under a lock.
 
 ## Verification

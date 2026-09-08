@@ -8,17 +8,26 @@ the run loudly — idempotence on correct answers is the acceptance gate.
 """
 
 import json
+import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from extract_filter import refine
 
-DATA = Path("aux_data")
+# Same resolution story as aux_client.py: fetched data, env wins, cwd default.
+_cands = ([Path(os.environ["INIZ_AUX_DATA"])]
+          if os.environ.get("INIZ_AUX_DATA") else []) + [Path("aux_data")]
+DATA = next((p for p in _cands if p.exists()), None)
+if DATA is None:
+    raise FileNotFoundError(
+        "aux_data/ not found — run scripts/fetch_aux_data.py from "
+        "~/npu-provider/work/ or set INIZ_AUX_DATA.")
 RUNS = [
     "aux_bench_int8_NPU_extract.json",
     "aux_bench_int4_NPU_extract.json",
     "aux_bench_qwen2.5-0.5b-instruct-int8-ov_CPU.json",
+    "aux_bench_int4_CPU.json",
 ]
 
 

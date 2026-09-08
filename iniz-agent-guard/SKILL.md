@@ -120,6 +120,7 @@ Use 128. The seq_len 192 IR is kept as `models/iniz-guard-*-ov-seq192` for compa
 | **NPU** | `NPU` | **34.4 ms** |
 | CPU | `['CPU']` | ~94 ms (measured at seq 192) |
 | GPU.0 iGPU | `['GPU.0']` | 86.6 ms (seq 128; acc 0.9575, one sample off NPU) |
+| GPU.1 dGPU (RTX 5060) | `['GPU.1']` | 689.2 ms (compiles and runs, val/test acc **identical** to NPU 0.9586/0.9650 — 20× slower, p90 ≈ p50 so not a wake-up artifact) |
 
 ### Quality (IR INT8 @ NPU, seq_len 128, validated mapping)
 
@@ -290,7 +291,7 @@ An NPU deployment is correct only when **all** of these hold:
 - `notebooks/01_train_guard.ipynb` — 3-head training (produces checkpoint-2634)
 - `notebooks/02_verify_export_deploy.ipynb` — verify → export → NPU proof → deploy
 - `results/` — eval_final.json, eval_final_seq128.json, eval_final_gpu0.json,
-  mapping_verdict.json,
+  eval_final_gpu1.json, mapping_verdict.json,
   npu_verify_int8.json, npu_proof_npuonly.json, luid_{NPU,GPU_0,CPU}.json
 - `references/npu-export-pitfalls.md` — real tracebacks for every failing export path
 - `references/tokenizer-signature-pitfall.md` — GENERATIVE-path pitfall (not the guard)

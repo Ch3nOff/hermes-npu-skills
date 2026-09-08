@@ -55,11 +55,13 @@ p90 34.8 ms. End-to-end server: `_npu_ms` p50 35.4 ms, client round-trip 52 ms.
 | **NPU** | `NPU` | **34.4 ms** |
 | CPU | `['CPU']` | ~94 ms |
 | iGPU (GPU.0) | `['GPU.0']` | 86.6 ms (seq 128) |
+| dGPU (GPU.1, RTX 5060) | `['GPU.1']` | 689.2 ms — compiles, accuracy identical to NPU, 20× slower |
 
 The NPU is ~2.7× faster than the CPU for this workload.
 
 Evidence: `results/eval_final_seq128.json`, `results/eval_final_gpu0.json`,
-`results/npu_verify_int8.json`, `results/npu_proof_npuonly.json`.
+`results/eval_final_gpu1.json`, `results/npu_verify_int8.json`,
+`results/npu_proof_npuonly.json`.
 
 ### Proof of NPU execution (three layers)
 

@@ -234,12 +234,18 @@ Environment: `INIZ_AUX_MODEL`, `INIZ_AUX_DEVICE` (**default `CPU`**),
 `INIZ_AUX_PORT` (8011), `INIZ_AUX_MAX_CHARS` (8000).
 
 `/extract` returns `grounded` — whether the answer occurs in the input — plus a
-`_warning` that grounded ≠ correct. All four misses in the smoke test were
-*grounded-but-wrong*, so the flag alone must not be treated as validation.
+`_warning` that grounded ≠ correct, plus the `kind` used and the `filter_rule`
+applied (null when the raw answer passed through untouched). The single miss in the
+current smoke test was *grounded-but-wrong* (`4.12.0` vs `4.11.2` — two versions in
+one source, nothing to anchor on), so the flag alone must not be treated as
+validation.
 
-Measured over HTTP on CPU: compile 1.29 s, warmup 160.5 ms, summarize p50 944.7 ms,
-sentiment p50 46.6 ms (12/12 correct), extract p50 122.2 ms (6/10 exact), 25 requests,
-`VERDICT: PASS`.
+Measured over HTTP on CPU with the post-filter live: compile 1.58 s, warmup
+222.6 ms, summarize p50 1239.1 ms, sentiment p50 55.6 ms (12/12 correct), extract
+p50 148.5 ms (**9/10 exact**, kind inferred from the question — no `kind` passed),
+25 requests, all five error cases 4xx, `VERDICT: PASS`. Served extract matches the
+offline INT8@CPU filtered number exactly (9/10); the miss is the documented
+ambiguous-version limit.
 
 **Security:** binds to `127.0.0.1` with **no authentication**. Free-text input to a
 generative model — do not expose it without auth.

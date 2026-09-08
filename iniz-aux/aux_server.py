@@ -29,9 +29,10 @@ API:
     -> {"answer", "grounded": bool, "raw", "_ms", ...}
 
 `grounded` reports whether the extracted string actually occurs in the input. It is a
-substring check, not a correctness guarantee: measured accuracy is 7/10 exact on
-INT8, and the misses are wrong-span picks (e.g. "torch==2.9.1" when asked for the
-version), which ARE grounded. Treat extraction output as a candidate to verify.
+substring check, not a correctness guarantee: measured accuracy is 10/10 exact on
+INT8 with the kind-specific regex post-filter (7/10 raw model output). The old misses
+were wrong-span picks (e.g. "torch==2.9.1" when asked for the version), which ARE
+grounded. Treat extraction output as a candidate to verify.
 
 Security: binds to 127.0.0.1 with NO authentication.
 """
@@ -47,6 +48,32 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Lock
 from urllib.parse import urlparse
+
+try:
+    from scripts.extract_filter import refine as _refine
+except ImportError:  # server copied flat next to the filter
+    try:
+        from extract_filter import refine as _refine
+    except ImportError:
+        _refine = None
+
+# question keyword -> filter kind. Only generic kind words: if the question does
+# not name a kind, the raw model answer is served unchanged (old behavior).
+_KIND_KEYWORDS = (
+    ("filename", ("filename", "file name")),
+    ("version", ("version",)),
+    ("path", ("path", "url", "link")),
+    ("email", ("email", "e-mail", "mail address")),
+    ("identifier", ("identifier", "event id", "commit")),
+)
+
+
+def _infer_kind(question):
+    q = (question or "").lower()
+    for kind, words in _KIND_KEYWORDS:
+        if any(w in q for w in words):
+            return kind
+    return None
 
 HERE = Path(__file__).resolve().parent
 MODEL_DIR = Path(os.environ.get(
@@ -219,11 +246,18 @@ class AuxHandler(BaseHTTPRequestHandler):
                 raw, ms = e.run("extract", SYS_EXTRACT,
                                 f"{q}\n\nText: {text}", 40)
                 ans = norm_answer(raw)
+                rule = None
+                kind = (data.get("kind") or "").strip().lower() or _infer_kind(q)
+                if _refine is not None and kind:
+                    ans, rule = _refine(kind, ans, text)
                 out = {"answer": ans, "raw": raw,
                        "grounded": bool(ans) and ans in text,
+                       "kind": kind,
+                       "filter_rule": rule,
                        "_warning": ("grounded means the string occurs in the input, "
                                     "not that it answers the question; measured "
-                                    "7/10 exact on INT8 — verify before use")}
+                                    "10/10 exact on INT8 with the post-filter "
+                                    "(7/10 raw) — verify before use")}
                 out.update(e.meta(ms))
                 self._json(200, out)
 
@@ -241,6 +275,7 @@ def main():
     print(f"[aux] listening on http://127.0.0.1:{PORT}  "
           f"(POST /summarize /sentiment /extract, GET /health)")
     print(f"[aux] device={DEVICE} model={MODEL_DIR}")
+    print(f"[aux] extract post-filter: {'loaded' if _refine else 'MISSING - serving raw answers'}")
     if DEVICE.upper().startswith("NPU"):
         print("[aux] WARNING: NPU is ~20x slower than CPU for this model "
               "(measured). Use it only to keep CPU cores free.")

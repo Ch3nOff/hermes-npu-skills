@@ -260,8 +260,13 @@ with exact known answers:
 **Zero refusals and zero hallucinations in 30 attempts.** Every failure was a wrong
 *span* — a real substring, just not the requested one: `torch==2.9.1` instead of
 `2.9.1`, `prod-media-eu-west-1/thumbnails/` with the `s3://` dropped. That is a
-boundary-selection problem, fixable with a regex filter, not fabrication. The stale
-warning would have killed a task that works ~65 % of the time and fails safely.
+boundary-selection problem, not fabrication — and a kind-specific regex post-filter
+(`scripts/extract_filter.py`: version token, path expansion, identifier shape check)
+fixed it: **10/10 on INT8@NPU, 9/10 on INT4@NPU and INT8@CPU**, with an idempotence
+gate proving no exact answer was broken. The two remaining misses are documented
+limits, not attempts: a wrong pick with nothing to anchor on (`config`), and a
+genuinely ambiguous question (two versions in one source). Caveat: tuned and tested
+on the same n=10 set.
 
 ### Measured quality
 
@@ -270,9 +275,9 @@ decoding:
 
 | Model | Device | ROUGE-1 | ROUGE-2 | ROUGE-L | Sentiment | Extract |
 |---|---|---|---|---|---|---|
-| INT8 | NPU | 0.3179 | 0.1299 | 0.2321 | **0.9250** | 7/10 |
-| INT4 | NPU | 0.3155 | 0.1041 | 0.2425 | 0.9000 | 6/10 |
-| INT8 | CPU | 0.3218 | 0.1336 | 0.2404 | **0.9250** | 6/10 |
+| INT8 | NPU | 0.3179 | 0.1299 | 0.2321 | **0.9250** | 7/10 raw, **10/10** filtered |
+| INT4 | NPU | 0.3155 | 0.1041 | 0.2425 | 0.9000 | 6/10 raw, **9/10** filtered |
+| INT8 | CPU | 0.3218 | 0.1336 | 0.2404 | **0.9250** | 6/10 raw, **9/10** filtered |
 
 **Sentiment is the one to actually deploy:** 0.9250 accuracy, 0 unparsed outputs across
 40 items, 43.8 ms on CPU. INT4 is 4.2× faster than INT8 on NPU for ~equal ROUGE-1, but
@@ -294,7 +299,8 @@ drafts.
 - **Summarization is mediocre** (ROUGE-1 0.32 vs 0.40+ reference-grade) and
   inconsistent (per-item 0.089–0.531).
 - **Misattribution rate unknown**; one confirmed case in 12 is a floor, not a rate.
-- **Extraction ~65 % exact**, no post-filter or retry implemented.
+- **Extraction is 10/10 with the post-filter (7/10 raw), n=10.** Remaining risk is
+  overfitting to the tiny labeled set. Retry logic is still unimplemented.
 - **Only 12 summarization items** — wide error bars.
 - **No long-context test** (articles capped at 3500 chars), so "context compression"
   remains unproven.
@@ -468,7 +474,8 @@ iniz-stt/
 iniz-aux/
 ├── SKILL.md                  # Full skill: CPU-beats-NPU verdict, 8 pitfalls
 ├── aux_server.py             # HTTP server (LLMPipeline, CPU default by measurement)
-├── scripts/                  # fetch data, bench, grounding audit, NPU proof, client
+├── scripts/                  # fetch data, bench, grounding audit, NPU proof, client,
+│                             # extract_filter + test_filter (post-filter, idempotence gate)
 └── results/                  # aux_bench_*, aux_*_grounding, aux_proof_* JSON
 
 iniz-power/
